@@ -6,9 +6,15 @@ applications, including multi-threaded and distributed applications. It
 operates directly on the user binary executable, without any Linux kernel
 modules or other kernel modifications.
 
-DMTCP supports:
+DMTCP supports transparent application checkpoint/restart on:
  * most Linux distros
  * x86_64, i386, arm64, risc-v
+
+On macOS, DMTCP provides the control-plane tools `dmtcp_coordinator` and
+`dmtcp_command`. They can coordinate DMTCP workers running on Linux over TCP.
+Checkpointing or restarting a macOS application is not supported. The worker
+runtime depends on Linux procfs, ELF loading and symbol interposition, Linux
+thread and memory system calls, and architecture-specific MTCP restart code.
 
 If you are looking for transparent checkpointing of MPI, please see:
  * MANA package: https://github.com/mpickpt/mana

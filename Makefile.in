@@ -10,6 +10,7 @@ CPPFLAGS = @CPPFLAGS@
 LDFLAGS = @LDFLAGS@
 M32=@M32@
 MULTILIB=@MULTILIB@
+CONTROL_PLANE_ONLY=@CONTROL_PLANE_ONLY@
 HAS_JAVA=@HAS_JAVA@
 HAS_JAVAC=@HAS_JAVAC@
 PACKAGE=@PACKAGE_TARNAME@
@@ -115,7 +116,11 @@ ifeq ($(M32),1)
 	$(MKDIR_P) $(top_builddir)/bin
 endif
 
+ifeq ($(CONTROL_PLANE_ONLY),yes)
+build: mkdirs dmtcp
+else
 build: mkdirs dmtcp plugin contrib
+endif
 ifeq ($(M32),1)
 	cd lib/dmtcp && $(LN_S) 32/lib/dmtcp/* ./ || true
 	mkdir -p bin || true
@@ -209,6 +214,15 @@ tests-32: build
 # TestSpec.needs_max_address_space, e.g. the mmap-noreserve test, which
 # mmaps a region far larger than 32MB).
 LIMIT=ulimit -S -v 33554432
+
+check-control: build
+	@if test "@HAS_PYTHON3@" = yes; then \
+	  python3 $(top_srcdir)/test/test_dmtcp_command_json.py; \
+	elif test "@HAS_PYTHON@" = yes; then \
+	  python $(top_srcdir)/test/test_dmtcp_command_json.py; \
+	else \
+	  echo '*** Python is required for check-control.'; exit 1; \
+	fi
 
 check: tests
 	@cd test && $(MAKE) --no-print-directory check-prereqs
@@ -402,23 +416,35 @@ endif
 
 install: all create-dirs
 	cd src && make DESTDIR=$(DESTDIR) $(INSTALL_FLAGS)
+ifneq ($(CONTROL_PLANE_ONLY),yes)
 	cd plugin && make DESTDIR=$(DESTDIR) $(INSTALL_FLAGS)
 	cd contrib && make DESTDIR=$(DESTDIR) $(INSTALL_FLAGS)
 	cd manpages && make ${INSTALL_FLAGS}
+else
+	cd manpages && make dmtcp_command.1.gz dmtcp_coordinator.1.gz
+endif
 ifeq ($(M32),0)
 	${INSTALL_DATA} $(top_srcdir)/QUICK-START.md $(DESTDIR)$(docdir)
 	${INSTALL_DATA} $(top_srcdir)/COPYING $(DESTDIR)$(docdir)
 	${INSTALL_DATA} $(top_srcdir)/AUTHORS $(DESTDIR)$(docdir)
 	${INSTALL_DATA} $(top_srcdir)/NEWS $(DESTDIR)$(docdir)
+ifeq ($(CONTROL_PLANE_ONLY),yes)
+	${INSTALL_DATA} $(top_srcdir)/manpages/dmtcp_command.1.gz \
+	  $(top_srcdir)/manpages/dmtcp_coordinator.1.gz \
+	  $(DESTDIR)$(mandir)/man1
+else
 	${INSTALL_DATA} $(top_srcdir)/manpages/*.1.gz $(DESTDIR)$(mandir)/man1
 	(cd $(DESTDIR)$(mandir)/man1; \
 	  for file in ${MANPAGES_AUTOGEN}; do $(LN_S) dmtcp.1.gz $$file; done)
 endif
+endif
 
 uninstall:
 	cd src && make DESTDIR=$(DESTDIR) $(UNINSTALL_FLAGS)
+ifneq ($(CONTROL_PLANE_ONLY),yes)
 	cd plugin && make DESTDIR=$(DESTDIR) $(UNINSTALL_FLAGS)
 	cd contrib && make DESTDIR=$(DESTDIR) $(UNINSTALL_FLAGS)
+endif
 ifeq ($(M32),0)
 	rm -Rf "$(DESTDIR)$(docdir)"
 	cd $(DESTDIR)$(mandir)/man1 && rm -f ${MANPAGES} ${MANPAGES_AUTOGEN}

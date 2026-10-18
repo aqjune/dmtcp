@@ -25,3 +25,21 @@ jobs:
       run: make tests
     - name: make check
       run: make check AUTOTEST="--retry-once --jobs 8"
+
+  macos-control-plane:
+    runs-on: macos-latest
+
+    steps:
+    - uses: actions/checkout@v3
+    - name: configure control-plane build
+      run: ./configure
+    - name: build coordinator and command
+      run: make -j2
+    - name: verify unsupported runtime tools are not built
+      run: |
+        test -x bin/dmtcp_coordinator
+        test -x bin/dmtcp_command
+        test ! -e bin/dmtcp_launch
+        test ! -e bin/dmtcp_restart
+    - name: run control-plane tests
+      run: make check-control

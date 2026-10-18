@@ -69,7 +69,11 @@
 #include <sys/stat.h>
 #include <sys/types.h>
 #include <sys/wait.h>
-#include <sys/prctl.h>
+#ifdef __APPLE__
+# include <pthread.h>
+#else
+# include <sys/prctl.h>
+#endif
 #include <time.h>
 #include <unistd.h>
 #include <algorithm>
@@ -85,12 +89,18 @@
 #include "protectedfds.h"
 #include "restartscript.h"
 #include "tokenize.h"
-#include "syscallwrappers.h"
+#ifndef DMTCP_CONTROL_ONLY
+# include "syscallwrappers.h"
+#endif
 #include "util.h"
 #include "dmtcp_assert.h"
 #include "coordinatorplugin.h"
 #undef min
 #undef max
+
+#ifndef HOST_NAME_MAX
+# define HOST_NAME_MAX 255
+#endif
 
 #define BINARY_NAME "dmtcp_coordinator"
 
@@ -116,6 +126,9 @@ static const char *theUsage =
   "Options:\n"
   "  -p, --coord-port PORT_NUM (environment variable DMTCP_COORD_PORT)\n"
   "      Port to listen on (default: " STRINGIFY(DEFAULT_PORT) ")\n"
+  "  --coord-bind ADDRESS (environment variable DMTCP_COORD_BIND)\n"
+  "      Local address to listen on (default: " DEFAULT_HOST ").\n"
+  "      Use 0.0.0.0 explicitly to accept connections on all interfaces.\n"
   "  --port-file filename\n"
   "      File to write listener port number.\n"
   "      (Useful with '--port 0', which is used to assign a random port)\n"
@@ -204,8 +217,12 @@ static string coordHostname;
 static struct in_addr localhostIPAddr;
 
 #define MAX_EVENTS 10000
+#ifndef DMTCP_USE_POLL_EVENT_LOOP
 struct epoll_event events[MAX_EVENTS];
 int epollFd;
+#else
+static vector<CoordClient *> registeredClients;
+#endif
 static jalib::JSocket *listenSock = NULL;
 
 static void removeStaleSharedAreaFile();
@@ -868,6 +885,9 @@ preExitCleanup()
 void
 DmtcpCoordinator::onDisconnect(CoordClient *client)
 {
+#ifdef DMTCP_USE_POLL_EVENT_LOOP
+  std::erase(registeredClients, client);
+#endif
   if (client->isNSWorker()) {
     client->sock().close();
     delete client;
@@ -1594,6 +1614,100 @@ void DmtcpCoordinator::queueCheckpoint()
 void
 DmtcpCoordinator::eventLoop()
 {
+#ifdef DMTCP_USE_POLL_EVENT_LOOP
+  bool stdinClosed = flags.daemon ||
+    jalib::Filesystem::GetDeviceName(STDIN_FILENO) == "/dev/null" ||
+    jalib::Filesystem::GetDeviceName(STDIN_FILENO) == "/dev/zero" ||
+    jalib::Filesystem::GetDeviceName(STDIN_FILENO) == "/dev/random";
+
+  while (true) {
+    CoordPluginMgr::tick(getStatus());
+    printPrompt();
+
+    vector<struct pollfd> pollFds;
+    vector<void *> pollData;
+    pollFds.push_back({listenSock->sockfd(), POLLIN, 0});
+    pollData.push_back(listenSock);
+    if (!stdinClosed) {
+      pollFds.push_back({STDIN_FILENO, POLLIN, 0});
+      pollData.push_back(reinterpret_cast<void *>(STDIN_FILENO));
+    }
+    for (CoordClient *client : registeredClients) {
+      pollFds.push_back({client->sock().sockfd(), POLLIN, 0});
+      pollData.push_back(client);
+    }
+
+    int ready;
+    do {
+      ready = poll(pollFds.data(), pollFds.size(), 1000);
+      if (ready == 0) {
+        CoordPluginMgr::tick(getStatus());
+      }
+    } while ((ready == 0 || (ready < 0 && errno == EINTR)) &&
+             !checkpointQueued);
+
+    clearPrompt();
+    ASSERT_ERRNO(ready != -1 || errno == EINTR, "poll failed");
+
+    if (ready > 0) {
+      for (size_t index = 0; index < pollFds.size(); ++index) {
+        const short event = pollFds[index].revents;
+        if (event == 0) {
+          continue;
+        }
+
+        void *data = pollData[index];
+        if (event & (POLLIN | POLLPRI)) {
+          if (data == listenSock) {
+            onConnect();
+          } else if (data == reinterpret_cast<void *>(STDIN_FILENO)) {
+            string command;
+            std::getline(std::cin, command);
+            if (std::cin.eof() == 1) {
+              fputs("\n  Closing stdin...\n", stderr);
+              close(STDIN_FD);
+              stdinClosed = true;
+            } else {
+              std::transform(command.begin(), command.end(), command.begin(),
+                             [](unsigned char c) { return std::tolower(c); });
+              ltrim(command);
+              if (!command.empty()) {
+                handleUserCommand(command);
+              }
+            }
+          } else {
+            CoordClient *client = static_cast<CoordClient *>(data);
+            if (std::find(registeredClients.begin(), registeredClients.end(),
+                          client) != registeredClients.end()) {
+              onData(client);
+            }
+          }
+        }
+
+        if (event & (POLLHUP | POLLERR | POLLNVAL)) {
+          ASSERT(data != listenSock, "listen socket reported hangup/error");
+          if (data == reinterpret_cast<void *>(STDIN_FILENO)) {
+            if (!stdinClosed) {
+              close(STDIN_FD);
+              stdinClosed = true;
+            }
+          } else {
+            CoordClient *client = static_cast<CoordClient *>(data);
+            if (std::find(registeredClients.begin(), registeredClients.end(),
+                          client) != registeredClients.end()) {
+              onDisconnect(client);
+            }
+          }
+        }
+      }
+    }
+
+    if (checkpointQueued) {
+      checkpointQueued = false;
+      startCheckpoint();
+    }
+  }
+#else
   struct epoll_event ev;
 
   epollFd = epoll_create(MAX_EVENTS);
@@ -1716,11 +1830,15 @@ DmtcpCoordinator::eventLoop()
       startCheckpoint();
     }
   }
+#endif // DMTCP_USE_POLL_EVENT_LOOP
 }
 
 void
 DmtcpCoordinator::addDataSocket(CoordClient *client)
 {
+#ifdef DMTCP_USE_POLL_EVENT_LOOP
+  registeredClients.push_back(client);
+#else
   struct epoll_event ev;
 
 #ifdef EPOLLRDHUP
@@ -1733,6 +1851,7 @@ DmtcpCoordinator::addDataSocket(CoordClient *client)
                          &ev) != -1,
                "epoll_ctl add client socket failed: fd={}",
                client->sock().sockfd());
+#endif // DMTCP_USE_POLL_EVENT_LOOP
 }
 
 #define min(x, y) ((x) < (y) ? (x) : (y))
@@ -1764,7 +1883,11 @@ void set_short_cmdline(char *argv0, const char *port) {
   short_name(buf, argv0, sizeof buf, port_str);
   // For debugging
   // printf("buf: %s\n", buf);
+#ifdef __APPLE__
+  pthread_setname_np(buf);
+#else
   prctl(PR_SET_NAME, buf); // set /proc/self/comm
+#endif
 }
 
 void set_long_cmdline(char *argv0, const char *port) {
@@ -1857,6 +1980,9 @@ main(int argc, char **argv)
                isdigit(argv[0][2])) { // else if -p0, for example
       flags.thePort = jalib::StringToInt(argv[0] + 2);
       shift;
+    } else if (argc > 1 && s == "--coord-bind") {
+      flags.bindAddress = argv[1];
+      shift; shift;
     } else if (argc > 1 && s == "--port-file") {
       flags.thePortFile = argv[1];
       shift; shift;
@@ -1918,14 +2044,15 @@ main(int argc, char **argv)
           listenSock->port());
   } else {
     errno = 0;
-    listenSock = new jalib::JServerSocket(jalib::JSockAddr::ANY, flags.thePort, 128);
+    jalib::JSockAddr bindAddress(flags.bindAddress.c_str());
+    listenSock = new jalib::JServerSocket(bindAddress, flags.thePort, 128);
     ASSERT_ERRNO(listenSock->isValid(),
-                 "failed to create listen socket for port {}. "
+                 "failed to create listen socket for address {} port {}. "
                  "If msg is \"Address already in use\", this may be an old "
                  "coordinator. Kill default coordinator and try again: "
                  "dmtcp_command -q. If that fails, pkill -9 dmtcp_coord and "
                  "try again in a minute.",
-                 flags.thePort);
+                 flags.bindAddress, flags.thePort);
   }
 
   flags.thePort = listenSock->port();
@@ -1944,9 +2071,11 @@ main(int argc, char **argv)
   if (!flags.quiet) {
     fprintf(stderr, "dmtcp_coordinator starting..."
                     "\n    Host: %s (%s)"
+                    "\n    Bind address: %s"
                     "\n    Port: %d"
                     "\n    Checkpoint Interval: ",
-            coordHostname.c_str(), inet_ntoa(localhostIPAddr), flags.thePort);
+            coordHostname.c_str(), inet_ntoa(localhostIPAddr),
+            flags.bindAddress.c_str(), flags.thePort);
     if (flags.interval == 0) {
       fprintf(stderr, "disabled (checkpoint manually instead)");
     } else {

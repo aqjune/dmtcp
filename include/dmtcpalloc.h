@@ -34,6 +34,7 @@
 #include <set>
 #include <sstream>
 #include <string>
+#include <string_view>
 #include <type_traits>
 #include <utility>
 #include <vector>
@@ -145,7 +146,8 @@ struct std::hash<dmtcp::string>
 {
     std::size_t operator()(dmtcp::string const& s) const noexcept
     {
-        return std::_Hash_impl::hash(s.data(), s.length());
+        return std::hash<std::string_view>{}(
+          std::string_view(s.data(), s.length()));
     }
 };
 

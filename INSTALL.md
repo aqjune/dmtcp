@@ -14,6 +14,34 @@ And install python3 if you need the tests:
 sudo apt install python3 -y
 ```
 
+On macOS, install the Xcode command-line tools and Python 3:
+
+```bash
+xcode-select --install
+brew install autoconf automake python
+```
+
+macOS builds select `--enable-control-plane-only` automatically. This builds
+`dmtcp_coordinator` and `dmtcp_command`, which can control Linux DMTCP workers
+over TCP. It does not build `dmtcp_launch`, `dmtcp_restart`, `libdmtcp`, MTCP,
+or plugins, and it cannot checkpoint macOS applications.
+
+The coordinator listens on `127.0.0.1` by default. To accept workers from
+other hosts, bind an intended interface explicitly, for example:
+
+```bash
+./bin/dmtcp_coordinator --coord-bind 192.0.2.10
+```
+
+Do not use `--coord-bind 0.0.0.0` on an untrusted network; the DMTCP wire
+protocol does not authenticate clients.
+
+Run the portable control-plane tests with:
+
+```bash
+make check-control
+```
+
 ### Build instructions
 
 To build, use:

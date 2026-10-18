@@ -9,7 +9,16 @@
 
 #include "constants.h"
 #include "protectedfds.h"
-#include "syscallwrappers.h"
+#ifndef DMTCP_CONTROL_ONLY
+# include "syscallwrappers.h"
+# define DMTCP_REAL_OPEN _real_open
+# define DMTCP_REAL_CLOSE _real_close
+# define DMTCP_REAL_DUP2 _real_dup2
+#else
+# define DMTCP_REAL_OPEN ::open
+# define DMTCP_REAL_CLOSE ::close
+# define DMTCP_REAL_DUP2 ::dup2
+#endif
 #include "uniquepid.h"
 #include "util.h"
 #include "dmtcp_assert.h"
@@ -126,7 +135,7 @@ class LoggerState {
 
   void initializeConsole(const char *stderrPath)
   {
-    if (_real_dup2(PROTECTED_STDERR_FD, PROTECTED_STDERR_FD) ==
+    if (DMTCP_REAL_DUP2(PROTECTED_STDERR_FD, PROTECTED_STDERR_FD) ==
         PROTECTED_STDERR_FD) {
       consoleFd_ = PROTECTED_STDERR_FD;
       return;
@@ -140,7 +149,7 @@ class LoggerState {
       }
     }
 
-    int fd = _real_dup2(STDERR_FILENO, PROTECTED_STDERR_FD);
+    int fd = DMTCP_REAL_DUP2(STDERR_FILENO, PROTECTED_STDERR_FD);
     if (fd == PROTECTED_STDERR_FD) {
       consoleFd_ = fd;
       return;
@@ -153,7 +162,7 @@ class LoggerState {
   bool setFile(const char *path)
   {
     if (fileFd_ != -1) {
-      _real_close(fileFd_);
+      DMTCP_REAL_CLOSE(fileFd_);
       fileFd_ = -1;
     }
 
@@ -168,7 +177,7 @@ class LoggerState {
   void closeConsole()
   {
     if (consoleFd_ != -1 && consoleFd_ != STDERR_FILENO) {
-      _real_close(consoleFd_);
+      DMTCP_REAL_CLOSE(consoleFd_);
     }
     consoleFd_ = -1;
   }
@@ -223,16 +232,16 @@ class LoggerState {
 
   static int openProtectedFile(const char *path, int protectedFd)
   {
-    int fd = _real_open(path,
+    int fd = DMTCP_REAL_OPEN(path,
                         O_WRONLY | O_APPEND | O_CREAT,
                         S_IRUSR | S_IWUSR);
     if (fd == -1) {
       return -1;
     }
 
-    int newFd = _real_dup2(fd, protectedFd);
+    int newFd = DMTCP_REAL_DUP2(fd, protectedFd);
     if (fd != newFd) {
-      _real_close(fd);
+      DMTCP_REAL_CLOSE(fd);
     }
     return newFd;
   }

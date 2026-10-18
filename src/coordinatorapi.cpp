@@ -614,9 +614,11 @@ startNewCoordinator(CoordinatorMode mode)
          "to a remote host: host={} current_host={}",
          host, currentHost);
 
-  // Create a socket and bind it to an unused port.
+  // Bind to the configured local coordinator address.  The default host is
+  // 127.0.0.1; selecting a non-loopback local host is an explicit exposure.
   errno = 0;
-  jalib::JServerSocket coordinatorListenerSocket(jalib::JSockAddr::ANY,
+  jalib::JSockAddr coordinatorAddress(host.c_str());
+  jalib::JServerSocket coordinatorListenerSocket(coordinatorAddress,
                                                  port, 128);
   if (!coordinatorListenerSocket.isValid()) {
     int orig_errno = errno;

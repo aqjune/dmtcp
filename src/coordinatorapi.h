@@ -25,10 +25,13 @@
 #include "../jalib/jalloc.h"
 #include "constants.h"
 #include "dmtcpmessagetypes.h"
-#include "protectedfds.h"
-#include "shareddata.h"
-#include "syscallwrappers.h"
-#include "kvdb.h"
+
+#ifndef DMTCP_CONTROL_ONLY
+# include "protectedfds.h"
+# include "shareddata.h"
+# include "syscallwrappers.h"
+# include "kvdb.h"
+#endif
 
 namespace dmtcp
 {
@@ -41,6 +44,16 @@ enum CoordinatorMode {
 
 namespace CoordinatorAPI
 {
+
+char *connectAndSendUserCommand(CoordinatorCmd command,
+                                CoordinatorCmdStatus *coordCmdStatus = NULL,
+                                int *numPeers = NULL,
+                                int *isRunning = NULL,
+                                int *ckptInterval = NULL,
+                                DmtcpMessage *response = NULL);
+CoordinatorCmd parseCoordinatorCmd(const char *command);
+
+#ifndef DMTCP_CONTROL_ONLY
 
 void eventHook(DmtcpEvent_t event, DmtcpEventData_t *data);
 
@@ -70,13 +83,6 @@ void sendMsgToCoordinator(DmtcpMessage msg,
 void sendMsgToCoordinator(const DmtcpMessage &msg, const string &data);
 void recvMsgFromCoordinator(DmtcpMessage *msg, void **extraData = NULL);
 bool waitForBarrier(const string& barrier, uint32_t *numPeers = NULL);
-char *connectAndSendUserCommand(CoordinatorCmd command,
-                                CoordinatorCmdStatus *coordCmdStatus = NULL,
-                                int *numPeers = NULL,
-                                int *isRunning = NULL,
-                                int *ckptInterval = NULL,
-                                DmtcpMessage *response = NULL);
-CoordinatorCmd parseCoordinatorCmd(const char *command);
 
 void sendCkptFilename();
 
@@ -86,6 +92,8 @@ kvdbRequest(DmtcpMessage const& msg,
             string const& key,
             string const& val,
             string *oldVal);
+
+#endif // ifndef DMTCP_CONTROL_ONLY
 
 } // namespace CoordinatorAPI
 } // namespace dmtcp

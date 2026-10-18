@@ -22,6 +22,9 @@
 #ifndef DMTCPDMTCPCOORDINATOR_H
 #define DMTCPDMTCPCOORDINATOR_H
 
+#include <limits.h>
+#include <unistd.h>
+
 #include "../jalib/jsocket.h"
 #include "../jalib/jconvert.h"
 #include "dmtcpalloc.h"
@@ -110,6 +113,7 @@ class CoordFlags {
       int staleTimeout = 0;
       int interval = 0;
       int thePort = DEFAULT_PORT;
+      string bindAddress = DEFAULT_HOST;
       string thePortStr = "";
       bool daemon = false;
       bool useLogFile = false;
@@ -132,6 +136,11 @@ class CoordFlags {
           thePort = jalib::StringToInt(portStr);
         }
 
+        const char *bindStr = getenv(ENV_VAR_COORD_BIND);
+        if (bindStr != NULL && bindStr[0] != '\0') {
+          bindAddress = bindStr;
+        }
+
         if (getenv(ENV_VAR_COORD_LOGFILE)) {
           useLogFile = true;
           logFilename = getenv(ENV_VAR_COORD_LOGFILE);
@@ -140,7 +149,8 @@ class CoordFlags {
         if (getenv(ENV_VAR_CHECKPOINT_DIR) != NULL) {
           ckptDir = getenv(ENV_VAR_CHECKPOINT_DIR);
         } else {
-          ckptDir = get_current_dir_name();
+          char cwd[PATH_MAX];
+          ckptDir = getcwd(cwd, sizeof(cwd)) != NULL ? cwd : ".";
         }
 
         // Check and enable dumping KVDB.

@@ -18,7 +18,11 @@ dmtcpincludedir=$(top_srcdir)/include
 dmtcpversionincludedir = $(includedir)/dmtcp
 dmtcplibdir = $(pkglibdir)
 
+if CONTROL_PLANE_ONLY
+SUBDIRS =
+else
 SUBDIRS = mtcp
+endif
 
 # clang/llmv handles arm64 correctly, but not GNU gcc.  For an overview,
 #   see:  https://github.com/llvm/llvm-project/issues/71883
@@ -65,34 +69,39 @@ AM_CPPFLAGS= -I$(dmtcpincludedir) -I$(jalibdir) -I$(srcdir) \
 	     -I$(srcdir)/plugin/pid
 
 # targets:
-noinst_LIBRARIES = libdmtcpinternal.a 				\
-		   libdmtcprestart.a 				\
-		   libsyscallsreal.a 				\
-		   libnohijack.a 				\
-		   libjalib.a					\
-		   libssh.a					\
-		   libdmtcp_alloc_internal.a			\
-		   libdmtcp_dl_internal.a			\
-		   libdmtcp_event_internal.a			\
-		   libdmtcp_file_internal.a			\
-		   libdmtcp_pty_internal.a			\
-		   libdmtcp_socket_internal.a			\
-		   libdmtcp_ssh_internal.a			\
-		   libdmtcp_svipc_internal.a			\
-		   libdmtcp_timer_internal.a			\
-		   libdmtcp_pid_internal.a			\
-		   libdmtcp_unique_ckpt_internal.a
+noinst_LIBRARIES = libjalib.a
+bin_PROGRAMS = $(d_bindir)/dmtcp_command \
+               $(d_bindir)/dmtcp_coordinator
 
-bin_PROGRAMS = $(d_bindir)/dmtcp_command 			\
-	       $(d_bindir)/dmtcp_coordinator 			\
-	       $(d_bindir)/dmtcp_launch 			\
-	       $(d_bindir)/dmtcp_nocheckpoint			\
-	       $(d_bindir)/dmtcp_get_libc_offset		\
-	       $(d_bindir)/dmtcp_restart			\
-	       $(d_bindir)/dmtcp_ssh				\
-	       $(d_bindir)/dmtcp_sshd
+if CONTROL_PLANE_ONLY
+noinst_LIBRARIES += libdmtcpcontrol.a
+else
+noinst_LIBRARIES += libdmtcpinternal.a \
+                    libdmtcprestart.a \
+                    libsyscallsreal.a \
+                    libnohijack.a \
+                    libssh.a \
+                    libdmtcp_alloc_internal.a \
+                    libdmtcp_dl_internal.a \
+                    libdmtcp_event_internal.a \
+                    libdmtcp_file_internal.a \
+                    libdmtcp_pty_internal.a \
+                    libdmtcp_socket_internal.a \
+                    libdmtcp_ssh_internal.a \
+                    libdmtcp_svipc_internal.a \
+                    libdmtcp_timer_internal.a \
+                    libdmtcp_pid_internal.a \
+                    libdmtcp_unique_ckpt_internal.a
+
+bin_PROGRAMS += $(d_bindir)/dmtcp_launch \
+                $(d_bindir)/dmtcp_nocheckpoint \
+                $(d_bindir)/dmtcp_get_libc_offset \
+                $(d_bindir)/dmtcp_restart \
+                $(d_bindir)/dmtcp_ssh \
+                $(d_bindir)/dmtcp_sshd
 
 dmtcplib_PROGRAMS = $(d_libdir)/libdmtcp.so
+endif
 
 include_HEADERS = $(srcdir)/../include/dmtcp.h
 dmtcpversioninclude_HEADERS = $(srcdir)/../include/dmtcp/version.h
@@ -168,6 +177,18 @@ libdmtcpinternal_a_SOURCES = coordinatorapi.cpp 		\
 			     util_init.cpp 			\
 			     util_misc.cpp 			\
 			     workerstate.cpp
+
+libdmtcpcontrol_a_SOURCES = coordinatorapi_command.cpp \
+                            dmtcpmessagetypes.cpp \
+                            jalibinterface_control.cpp \
+                            json.cpp \
+                            logger.cpp \
+                            tokenize.cpp \
+                            uniquepid.cpp \
+                            util_control.cpp \
+                            util_init.cpp \
+                            workerstate.cpp
+libdmtcpcontrol_a_CPPFLAGS = $(AM_CPPFLAGS) -DDMTCP_CONTROL_ONLY
 
 libjalib_a_SOURCES = $(jalibdir)/jalib.cpp			\
 		     $(jalibdir)/jalloc.cpp			\
@@ -415,10 +436,20 @@ __d_bindir__dmtcp_coordinator_SOURCES = dmtcp_coordinator.cpp 	\
 					lookup_service.cpp 	\
 					restartscript.cpp
 
-__d_bindir__dmtcp_coordinator_LDADD = libdmtcpinternal.a 	\
-				      libjalib.a 		\
-				      libnohijack.a		\
-				      -lpthread -lrt -ldl
+if CONTROL_PLANE_ONLY
+__d_bindir__dmtcp_coordinator_CPPFLAGS = $(AM_CPPFLAGS) \
+                                        -DDMTCP_CONTROL_ONLY \
+                                        -DDMTCP_USE_POLL_EVENT_LOOP
+__d_bindir__dmtcp_coordinator_LDADD = libdmtcpcontrol.a \
+                                      libjalib.a \
+                                      -lpthread
+else
+__d_bindir__dmtcp_coordinator_CPPFLAGS = $(AM_CPPFLAGS)
+__d_bindir__dmtcp_coordinator_LDADD = libdmtcpinternal.a \
+                                      libjalib.a \
+                                      libnohijack.a \
+                                      -lpthread -lrt -ldl
+endif
 
 __d_bindir__dmtcp_launch_SOURCES = dmtcp_launch.cpp
 
@@ -444,10 +475,16 @@ __d_bindir__dmtcp_restart_DEPENDENCIES  = libdmtcprestart.a
 
 __d_bindir__dmtcp_command_SOURCES = dmtcp_command.cpp
 
-__d_bindir__dmtcp_command_LDADD = libdmtcpinternal.a 		\
-				  libjalib.a 			\
-				  libnohijack.a			\
-				  -lpthread -lrt -ldl
+if CONTROL_PLANE_ONLY
+__d_bindir__dmtcp_command_CPPFLAGS = $(AM_CPPFLAGS) -DDMTCP_CONTROL_ONLY
+__d_bindir__dmtcp_command_LDADD = libdmtcpcontrol.a libjalib.a -lpthread
+else
+__d_bindir__dmtcp_command_CPPFLAGS = $(AM_CPPFLAGS)
+__d_bindir__dmtcp_command_LDADD = libdmtcpinternal.a \
+                                  libjalib.a \
+                                  libnohijack.a \
+                                  -lpthread -lrt -ldl
+endif
 
 __d_bindir__dmtcp_ssh_SOURCES =					\
 	plugin/ssh/dmtcp_ssh.cpp

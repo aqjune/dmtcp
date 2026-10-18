@@ -28,11 +28,16 @@
 #include <errno.h>
 #include <fcntl.h>
 #include <limits.h>  // for PATH_MAX
+#include <stdlib.h>
 #include <sys/stat.h>
-#include <sys/syscall.h>
 #include <sys/types.h>
 #include <sys/utsname.h>
 #include <unistd.h>
+#ifdef __APPLE__
+# include <mach-o/dyld.h>
+# include <sys/resource.h>
+#else
+# include <sys/syscall.h>
 
 struct linux_dirent64 {
   ino64_t d_ino;           /* 64-bit inode number */
@@ -41,6 +46,7 @@ struct linux_dirent64 {
   unsigned char d_type;    /* File type */
   char d_name[];           /* Filename (null-terminated) */
 };
+#endif
 
 #define DELETED_FILE_SUFFIX " (deleted)"
 
@@ -53,6 +59,19 @@ namespace
 dmtcp::string
 _GetProgramExe()
 {
+#ifdef __APPLE__
+  uint32_t size = PATH_MAX;
+  char path[PATH_MAX];
+  if (_NSGetExecutablePath(path, &size) != 0) {
+    return "";
+  }
+
+  char resolved[PATH_MAX];
+  if (realpath(path, resolved) != nullptr) {
+    return resolved;
+  }
+  return path;
+#else
   dmtcp::string exe = "/proc/self/exe";
 
   // NOTE: ResolveSymlink is returning string on stack.  Hopefully
@@ -67,12 +86,18 @@ _GetProgramExe()
   }
 
   return exeRes;
+#endif
 }
 
 // Set buf, and return length read (including all null characters)
 int
 _GetProgramCmdline(char *buf, int size)
 {
+#ifdef __APPLE__
+  (void)buf;
+  (void)size;
+  return 0;
+#else
   int fd = jalib::open("/proc/self/cmdline", O_RDONLY, 0);
   int rc;
 
@@ -82,6 +107,7 @@ _GetProgramCmdline(char *buf, int size)
   rc = jalib::readAll(fd, buf, size);
   jalib::close(fd);
   return rc;
+#endif
 }
 }
 
@@ -298,7 +324,18 @@ jalib::Filesystem::ResolveSymlink(const dmtcp::string &path)
 dmtcp::string
 jalib::Filesystem::GetDeviceName(int fd)
 {
+#ifdef __APPLE__
+  char path[PATH_MAX] = {0};
+  if (fcntl(fd, F_GETPATH, path) == 0) {
+    return path;
+  }
+  if (isatty(fd) && ttyname_r(fd, path, sizeof(path)) == 0) {
+    return path;
+  }
+  return "";
+#else
   return ResolveSymlink("/proc/self/fd/" + jalib::XToString(fd));
+#endif
 }
 
 bool
@@ -316,6 +353,27 @@ jalib::Filesystem::FileExists(const dmtcp::string &str)
 dmtcp::vector<dmtcp::string>
 ListDirEntriesInternal(const dmtcp::string& dir, int *procSelfFd = nullptr)
 {
+#ifdef __APPLE__
+  DIR *directory = opendir(dir.c_str());
+  ASSERT_ERRNO(directory != nullptr,
+               "failed to open directory: dir={}", dir);
+  if (procSelfFd != nullptr) {
+    *procSelfFd = dirfd(directory);
+  }
+
+  dmtcp::vector<dmtcp::string> result;
+  errno = 0;
+  while (struct dirent *entry = readdir(directory)) {
+    if (entry->d_ino != 0) {
+      result.push_back(entry->d_name);
+    }
+  }
+  const int readError = errno;
+  closedir(directory);
+  ASSERT_ERRNO(readError == 0,
+               "failed to read directory entries: dir={}", dir);
+  return result;
+#else
   int fd = jalib::open(dir.c_str(),
                        O_RDONLY | O_NDELAY | O_LARGEFILE | O_DIRECTORY);
 
@@ -351,6 +409,7 @@ ListDirEntriesInternal(const dmtcp::string& dir, int *procSelfFd = nullptr)
 
   JALLOC_HELPER_FREE(buf);
   return result;
+#endif
 }
 
 dmtcp::vector<dmtcp::string>
@@ -363,8 +422,22 @@ dmtcp::vector<int>
 jalib::Filesystem::ListOpenFds()
 {
   dmtcp::vector<int> fdVec;
+#ifdef __APPLE__
+  struct rlimit limit;
+  ASSERT_ERRNO(getrlimit(RLIMIT_NOFILE, &limit) == 0,
+               "getrlimit(RLIMIT_NOFILE) failed");
+  const rlim_t maxFd = limit.rlim_cur == RLIM_INFINITY ? 65536
+                                                       : limit.rlim_cur;
+  for (rlim_t fd = 0; fd < maxFd; ++fd) {
+    errno = 0;
+    if (fcntl(static_cast<int>(fd), F_GETFD) != -1 || errno != EBADF) {
+      fdVec.push_back(static_cast<int>(fd));
+    }
+  }
+#else
   int procSelfFd = -1;
-  const dmtcp::vector<dmtcp::string>& list = ListDirEntriesInternal("/proc/self/fd", &procSelfFd);
+  const dmtcp::vector<dmtcp::string>& list =
+    ListDirEntriesInternal("/proc/self/fd", &procSelfFd);
 
   for (const dmtcp::string& entry : list) {
     char *ch;
@@ -373,6 +446,7 @@ jalib::Filesystem::ListOpenFds()
       fdVec.push_back(fd);
     }
   }
+#endif
 
   std::sort(fdVec.begin(), fdVec.end());
   return fdVec;
@@ -400,6 +474,16 @@ jalib::Filesystem::GetCurrentHostname()
 dmtcp::string
 jalib::Filesystem::GetControllingTerm(pid_t pid /* = -1*/)
 {
+#ifdef __APPLE__
+  if (pid != -1 && pid != getpid()) {
+    return "";
+  }
+  char name[PATH_MAX] = {0};
+  if (ttyname_r(STDIN_FILENO, name, sizeof(name)) == 0) {
+    return name;
+  }
+  return "";
+#else
   char sbuf[1024];
   char ttyName[64];
   char procPath[64];
@@ -450,4 +534,5 @@ jalib::Filesystem::GetControllingTerm(pid_t pid /* = -1*/)
   }
 
   return ttyName;
+#endif
 }

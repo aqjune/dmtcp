@@ -3,6 +3,15 @@ DMTCP NEWS -- history of user-visible changes.
 Please send DMTCP bug reports via <dmtcp-forum@lists.sourceforge.net>,
 or "Issues" at https://github.com/dmtcp/dmtcp .
 
+Development version
+===================
+* macOS builds now provide `dmtcp_coordinator` and `dmtcp_command` for
+  controlling Linux DMTCP workers. Checkpoint/restart of macOS applications is
+  not supported.
+* Coordinators now listen on 127.0.0.1 by default. Multi-host deployments must
+  select an intended local interface with `--coord-bind` or
+  `DMTCP_COORD_BIND`; `0.0.0.0` remains available as an explicit choice.
+
 Version 4.1.1 release notes (May 10, 2026)
 ==========================================
 This is a minor release which fixes some compatibility issues related

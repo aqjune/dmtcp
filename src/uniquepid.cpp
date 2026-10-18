@@ -26,9 +26,6 @@
 #include "../jalib/jfilesystem.h"
 #include "../jalib/jserialize.h"
 #include "constants.h"
-#include "protectedfds.h"
-#include "shareddata.h"
-#include "syscallwrappers.h"
 #include "dmtcp_assert.h"
 
 using namespace dmtcp;

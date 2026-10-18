@@ -22,10 +22,12 @@
 #ifndef CONSTANTS_H
 #define CONSTANTS_H
 
-#include <features.h>
-#include <linux/version.h>
-
 #include "config.h"
+
+#ifndef DMTCP_CONTROL_ONLY
+# include <features.h>
+# include <linux/version.h>
+#endif
 
 // Turn on coordinator NameService by default. In future, we will replace the
 // logic in dmtcp_coordinator.cpp and dmtcp_worker.cpp to allow the coordinator
@@ -106,6 +108,7 @@
 
 #define ENV_VAR_COORD_LOGFILE       "DMTCP_COORD_LOG_FILENAME"
 #define ENV_VAR_COORD_WRITE_KVDB    "DMTCP_COORD_WRITE_KV_DATA"
+#define ENV_VAR_COORD_BIND          "DMTCP_COORD_BIND"
 
 // it is not yet safe to change these; these names are hard-wired in the code
 #define ENV_VAR_STDERR_PATH         "JALIB_STDERR_PATH"
@@ -191,9 +194,11 @@
 // #define MIN_SIGNAL 1
 // #define MAX_SIGNAL 30
 
-#if LINUX_VERSION_CODE <= KERNEL_VERSION(2, 6, 9)
-# define user_desc modify_ldt_ldt_s
-#endif // if LINUX_VERSION_CODE <= KERNEL_VERSION(2, 6, 9)
+#ifndef DMTCP_CONTROL_ONLY
+# if LINUX_VERSION_CODE <= KERNEL_VERSION(2, 6, 9)
+#  define user_desc modify_ldt_ldt_s
+# endif
+#endif // ifndef DMTCP_CONTROL_ONLY
 
 #define DMTCP_VERSION_AND_COPYRIGHT_INFO                            \
   BINARY_NAME " (DMTCP) " PACKAGE_VERSION "\n"                      \

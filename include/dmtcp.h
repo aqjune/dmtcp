@@ -22,17 +22,19 @@
 #include <sys/socket.h>
 #include <sys/types.h>
 
-#ifndef __USE_GNU
-# define __USE_GNU_NOT_SET
-# define __USE_GNU
-#endif // ifndef __USE_GNU
-#include <elf.h>  /* for NEXT_FNC() */
-#include <link.h>  /* for NEXT_FNC() */
-#include <dlfcn.h>  /* for NEXT_FNC() */
-#ifdef __USE_GNU_NOT_SET
-# undef __USE_GNU_NOT_SET
-# undef __USE_GNU
-#endif // ifdef __USE_GNU_NOT_SET
+#ifndef DMTCP_CONTROL_ONLY
+# ifndef __USE_GNU
+#  define __USE_GNU_NOT_SET
+#  define __USE_GNU
+# endif
+# include <elf.h>  /* for NEXT_FNC() */
+# include <link.h>  /* for NEXT_FNC() */
+# include <dlfcn.h>  /* for NEXT_FNC() */
+# ifdef __USE_GNU_NOT_SET
+#  undef __USE_GNU_NOT_SET
+#  undef __USE_GNU
+# endif
+#endif // ifndef DMTCP_CONTROL_ONLY
 
 #ifndef DMTCP_PACKAGE_VERSION
 # include "dmtcp/version.h"
@@ -547,6 +549,8 @@ void dmtcp_plugin_enable_ckpt(void);
 
 void dmtcp_add_to_ckpt_header(const char *key, const char *value);
 
+#ifndef DMTCP_CONTROL_ONLY
+
 typedef struct dt_tag {
   char *base_addr;   /* Base address shared object is loaded at. */
 
@@ -636,6 +640,8 @@ uint64_t dmtcp_dlsym_lib_fnc_offset(const char *libname, const char *symbol);
     }                                                                          \
     _real_##func;                                                              \
   })
+
+#endif // ifndef DMTCP_CONTROL_ONLY
 
 // ===================================================================
 // DMTCP utilities
