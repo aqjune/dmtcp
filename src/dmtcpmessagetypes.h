@@ -84,7 +84,12 @@ enum DmtcpMessageType {
   DMT_KILL_PEER,             // send kill message to peer
 
   DMT_KVDB_REQUEST,
-  DMT_KVDB_RESPONSE
+  DMT_KVDB_RESPONSE,
+
+  // A process that participates in coordinator lifecycle management but has
+  // no checkpoint/restart runtime.  Keep new message types at the end so
+  // existing protocol values remain stable.
+  DMT_REGISTER_ONLY_WORKER
 };
 
 enum CoordinatorCmd : uint32_t {
@@ -104,7 +109,8 @@ enum CoordinatorCmdStatus : int32_t {
   DMT_COORD_SUCCESS = 0,
   DMT_COORD_INVALID_COMMAND = -1,
   DMT_COORD_NOT_RUNNING = -2,
-  DMT_COORD_NOT_FOUND = -3
+  DMT_COORD_NOT_FOUND = -3,
+  DMT_COORD_CKPT_UNSUPPORTED = -4
 };
 
 ostream&operator<<(ostream &o, const DmtcpMessageType &s);

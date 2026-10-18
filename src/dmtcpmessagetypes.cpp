@@ -191,6 +191,8 @@ dmtcp::coordinatorCmdStatusName(CoordinatorCmdStatus response)
     return "DMT_COORD_NOT_RUNNING";
   case DMT_COORD_NOT_FOUND:
     return "DMT_COORD_NOT_FOUND";
+  case DMT_COORD_CKPT_UNSUPPORTED:
+    return "DMT_COORD_CKPT_UNSUPPORTED";
   default:
     return "DMT_COORD_INVALID_COMMAND";
   }
@@ -239,6 +241,7 @@ dmtcp::operator<<(dmtcp::ostream &o, const DmtcpMessageType &s)
 
     OSHIFTPRINTF(DMT_KVDB_REQUEST)
     OSHIFTPRINTF(DMT_KVDB_RESPONSE)
+    OSHIFTPRINTF(DMT_REGISTER_ONLY_WORKER)
 
   default:
     ASSERT(false, "Invalid Message Type: {}",

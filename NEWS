@@ -5,9 +5,12 @@ or "Issues" at https://github.com/dmtcp/dmtcp .
 
 Development version
 ===================
-* macOS builds now provide `dmtcp_coordinator` and `dmtcp_command` for
-  controlling Linux DMTCP workers. Checkpoint/restart of macOS applications is
-  not supported.
+* macOS builds now provide `dmtcp_coordinator`, `dmtcp_command`, and an
+  experimental single-process, registration-only `dmtcp_launch`. User-owned,
+  non-hardened Mach-O executables can join the coordinator and respond to
+  lifecycle commands. Process creation and image replacement are rejected.
+  Checkpoint requests are rejected explicitly; checkpoint/restart of macOS
+  applications is not supported.
 * Coordinators now listen on 127.0.0.1 by default. Multi-host deployments must
   select an intended local interface with `--coord-bind` or
   `DMTCP_COORD_BIND`; `0.0.0.0` remains available as an explicit choice.

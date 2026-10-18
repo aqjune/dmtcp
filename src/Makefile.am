@@ -76,6 +76,12 @@ endif
 noinst_LIBRARIES = libjalib.a
 bin_PROGRAMS = $(d_bindir)/dmtcp_command \
                $(d_bindir)/dmtcp_coordinator
+dmtcplib_PROGRAMS =
+
+if DARWIN_HOST
+bin_PROGRAMS += $(d_bindir)/dmtcp_launch
+dmtcplib_PROGRAMS += $(d_libdir)/libdmtcp-register.dylib
+endif
 
 if CONTROL_PLANE_ONLY
 noinst_LIBRARIES += libdmtcpcontrol.a
@@ -104,7 +110,7 @@ bin_PROGRAMS += $(d_bindir)/dmtcp_launch \
                 $(d_bindir)/dmtcp_ssh \
                 $(d_bindir)/dmtcp_sshd
 
-dmtcplib_PROGRAMS = $(d_libdir)/libdmtcp.so
+dmtcplib_PROGRAMS += $(d_libdir)/libdmtcp.so
 endif
 
 include_HEADERS = $(srcdir)/../include/dmtcp.h
@@ -115,6 +121,7 @@ nobase_noinst_HEADERS =						\
 			ckptserializer.h			\
 			constants.h 				\
 			coordinatorapi.h			\
+			coordinatorapi_registration.h		\
 			coordinatorplugin.h			\
 			dmtcp_coordinator.h			\
 			dmtcprestartinternal.h			\
@@ -430,6 +437,18 @@ __d_libdir__libdmtcp_so_DEPENDENCIES = libdmtcp_ssh_internal.a \
 				 libjalib.a 			\
 				 libsyscallsreal.a
 
+__d_libdir__libdmtcp_register_dylib_SOURCES = \
+	coordinatorapi_registration.cpp \
+	dmtcp_process_interpose.cpp \
+	dmtcp_register_dylib.cpp
+__d_libdir__libdmtcp_register_dylib_CPPFLAGS = $(AM_CPPFLAGS)
+__d_libdir__libdmtcp_register_dylib_LDFLAGS = \
+	-dynamiclib -Wl,-install_name,@rpath/libdmtcp-register.dylib
+__d_libdir__libdmtcp_register_dylib_LDADD = \
+	libdmtcpcontrol.a libjalib.a -lpthread
+__d_libdir__libdmtcp_register_dylib_DEPENDENCIES = \
+	libdmtcpcontrol.a libjalib.a
+
 __d_bindir__dmtcp_nocheckpoint_SOURCES = dmtcp_nocheckpoint.c
 
 __d_bindir__dmtcp_get_libc_offset_SOURCES = dmtcp_get_libc_offset.c
@@ -454,12 +473,18 @@ __d_bindir__dmtcp_coordinator_LDADD = libdmtcpinternal.a \
                                       -lpthread -lrt -ldl
 endif
 
+if DARWIN_HOST
+__d_bindir__dmtcp_launch_SOURCES = dmtcp_launch_macos.cpp
+__d_bindir__dmtcp_launch_LDFLAGS = -framework CoreFoundation \
+                                      -framework Security
+__d_bindir__dmtcp_launch_LDADD =
+else
 __d_bindir__dmtcp_launch_SOURCES = dmtcp_launch.cpp
-
 __d_bindir__dmtcp_launch_LDADD  = libdmtcpinternal.a 		\
 				  libjalib.a			\
 				  libnohijack.a			\
 				  -lpthread -lrt -ldl
+endif
 
 libdmtcprestart_a_SOURCES = dmtcprestartinternal.cpp
 libdmtcprestart_a_LIBADD  = libdmtcpinternal.a 			\

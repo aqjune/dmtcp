@@ -22,9 +22,25 @@ brew install autoconf automake python
 ```
 
 macOS builds select `--enable-control-plane-only` automatically. This builds
-`dmtcp_coordinator` and `dmtcp_command`, which can control Linux DMTCP workers
-over TCP. It does not build `dmtcp_launch`, `dmtcp_restart`, `libdmtcp`, MTCP,
-or plugins, and it cannot checkpoint macOS applications.
+`dmtcp_coordinator`, `dmtcp_command`, and an experimental registration-only
+`dmtcp_launch`. It does not build `dmtcp_restart`, the checkpoint runtime,
+MTCP, or plugins, and it cannot checkpoint macOS applications.
+
+Start a coordinator, then launch a user-owned, non-hardened executable:
+
+```bash
+./bin/dmtcp_coordinator
+./bin/dmtcp_launch --join-coordinator -- ./my-program
+```
+
+The process appears in `dmtcp_command --status` and responds to coordinator
+kill and quit commands. Checkpoint commands fail explicitly without stopping
+the process. Registration-only mode rejects scripts, process creation, and
+image replacement (`exec`) because it cannot yet track additional or replaced
+processes. The launcher uses `DYLD_INSERT_LIBRARIES`; macOS strips this
+variable for platform binaries and can reject it for hardened applications.
+Do not disable System Integrity Protection or hardened-runtime protections to
+use this feature.
 
 The coordinator listens on `127.0.0.1` by default. To accept workers from
 other hosts, bind an intended interface explicitly, for example:

@@ -288,6 +288,7 @@ CoordClient::CoordClient(const jalib::JSocket &sock,
     _barrier("")
 {
   _isNSWorker = isNSWorker;
+  _checkpointCapable = hello_remote.type != DMT_REGISTER_ONLY_WORKER;
   _realPid = hello_remote.realPid;
   _clientNumber = theNextClientNumber++;
   _identity = hello_remote.from;
@@ -296,16 +297,32 @@ CoordClient::CoordClient(const jalib::JSocket &sock,
   _ip = inet_ntoa(in->sin_addr);
 }
 
-void
+bool
 CoordClient::readProcessInfo(DmtcpMessage &msg)
 {
-  if (msg.extraBytes > 0) {
-    char *extraData = new char[msg.extraBytes];
-    _sock.readAll(extraData, msg.extraBytes);
-    _hostname = extraData;
-    _progname = extraData + _hostname.length() + 1;
-    delete[] extraData;
+  if (msg.extraBytes == 0) {
+    return false;
   }
+
+  vector<char> extraData(msg.extraBytes);
+  if (_sock.readAll(extraData.data(), msg.extraBytes) !=
+      static_cast<ssize_t>(msg.extraBytes)) {
+    return false;
+  }
+
+  const auto hostnameEnd = std::find(extraData.begin(), extraData.end(), '\0');
+  if (hostnameEnd == extraData.end()) {
+    return false;
+  }
+  const auto programBegin = hostnameEnd + 1;
+  const auto programEnd = std::find(programBegin, extraData.end(), '\0');
+  if (programEnd == extraData.end() || programEnd + 1 != extraData.end()) {
+    return false;
+  }
+
+  _hostname.assign(extraData.begin(), hostnameEnd);
+  _progname.assign(programBegin, programEnd);
+  return true;
 }
 
 int DmtcpCoordinator::numClients()
@@ -347,6 +364,14 @@ DmtcpCoordinator::handleUserCommand(CoordinatorCmd command,
 
   switch (command) {
   case DMT_BLOCKING_CKPT:
+    if (!allClientsCheckpointCapable()) {
+      NOTE("checkpoint unavailable: computation contains a registration-only "
+           "worker");
+      if (reply != NULL) {
+        reply->coordCmdStatus = DMT_COORD_CKPT_UNSUPPORTED;
+      }
+      break;
+    }
     blockUntilDone = true;
     TRACE("blocking checkpoint beginning...");
     if (startCheckpoint()) {
@@ -362,6 +387,14 @@ DmtcpCoordinator::handleUserCommand(CoordinatorCmd command,
     break;
 
   case DMT_KILL_AFTER_CKPT:
+    if (!allClientsCheckpointCapable()) {
+      NOTE("checkpoint unavailable: computation contains a registration-only "
+           "worker");
+      if (reply != NULL) {
+        reply->coordCmdStatus = DMT_COORD_CKPT_UNSUPPORTED;
+      }
+      break;
+    }
     TRACE("Will kill peers after creating the checkpoint...");
     killAfterCkptOnce = true;
     if (startCheckpoint()) {
@@ -376,6 +409,14 @@ DmtcpCoordinator::handleUserCommand(CoordinatorCmd command,
     break;
 
   case DMT_CHECKPOINT:
+    if (!allClientsCheckpointCapable()) {
+      NOTE("checkpoint unavailable: computation contains a registration-only "
+           "worker");
+      if (reply != NULL) {
+        reply->coordCmdStatus = DMT_COORD_CKPT_UNSUPPORTED;
+      }
+      break;
+    }
     TRACE("checkpointing...");
     if (startCheckpoint()) {
       if (reply != NULL) {
@@ -1043,20 +1084,27 @@ DmtcpCoordinator::onConnect()
   CoordClient *client = new CoordClient(remote, &remoteAddr, remoteLen,
                                         hello_remote);
 
-  if (hello_remote.extraBytes > 0) {
-    client->readProcessInfo(hello_remote);
+  if (hello_remote.extraBytes > 0 &&
+      !client->readProcessInfo(hello_remote)) {
+    WARN(false, "rejecting malformed worker process information");
+    remote.close();
+    delete client;
+    return;
   }
 
   if (hello_remote.type == DMT_RESTART_WORKER) {
     if (!validateRestartingWorkerProcess(hello_remote, remote,
                                          &remoteAddr, remoteLen)) {
+      delete client;
       return;
     }
     client->virtualPid(hello_remote.from.pid());
     _virtualPidToClientMap[client->virtualPid()] = client;
-  } else if (hello_remote.type == DMT_NEW_WORKER) {
+  } else if (hello_remote.type == DMT_NEW_WORKER ||
+             hello_remote.type == DMT_REGISTER_ONLY_WORKER) {
     if (!validateNewWorkerProcess(hello_remote, remote, client,
                                   &remoteAddr, remoteLen)) {
+      delete client;
       return;
     }
     _virtualPidToClientMap[client->virtualPid()] = client;
@@ -1066,6 +1114,7 @@ DmtcpCoordinator::onConnect()
             "type={}",
             static_cast<int>(hello_remote.type));
     remote.close();
+    delete client;
     return;
   }
 
@@ -1287,6 +1336,15 @@ DmtcpCoordinator::validateNewWorkerProcess(
   hello_local.virtualPid = client->virtualPid();
   ComputationStatus s = getStatus();
 
+  if (!client->checkpointCapable() && workersRunningAndSuspendMsgSent) {
+    NOTE("Refusing registration-only worker during checkpoint: identity={}",
+         hello_remote.from);
+    hello_local.type = DMT_REJECT_NOT_RUNNING;
+    remote << hello_local;
+    remote.close();
+    return false;
+  }
+
   if (workersRunningAndSuspendMsgSent == true) {
     // Handshake
     hello_local.compGroup = compId;
@@ -1345,8 +1403,25 @@ DmtcpCoordinator::validateNewWorkerProcess(
 }
 
 bool
+DmtcpCoordinator::allClientsCheckpointCapable() const
+{
+  for (const CoordClient *client : clients) {
+    if (!client->checkpointCapable()) {
+      return false;
+    }
+  }
+  return true;
+}
+
+bool
 DmtcpCoordinator::startCheckpoint()
 {
+  if (!allClientsCheckpointCapable()) {
+    NOTE("checkpoint unavailable: computation contains a registration-only "
+         "worker");
+    return false;
+  }
+
   ComputationStatus s = getStatus();
   if (s.minimumState == WorkerState::RUNNING && s.minimumStateUnanimous
       && !workersRunningAndSuspendMsgSent) {

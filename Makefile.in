@@ -11,6 +11,7 @@ LDFLAGS = @LDFLAGS@
 M32=@M32@
 MULTILIB=@MULTILIB@
 CONTROL_PLANE_ONLY=@CONTROL_PLANE_ONLY@
+DARWIN_HOST=@DARWIN_HOST@
 HAS_JAVA=@HAS_JAVA@
 HAS_JAVAC=@HAS_JAVAC@
 PACKAGE=@PACKAGE_TARNAME@
@@ -218,8 +219,14 @@ LIMIT=ulimit -S -v 33554432
 check-control: build
 	@if test "@HAS_PYTHON3@" = yes; then \
 	  python3 $(top_srcdir)/test/test_dmtcp_command_json.py; \
+	  if test "$(DARWIN_HOST)" = yes; then \
+	    python3 $(top_srcdir)/test/test_macos_launch.py; \
+	  fi; \
 	elif test "@HAS_PYTHON@" = yes; then \
 	  python $(top_srcdir)/test/test_dmtcp_command_json.py; \
+	  if test "$(DARWIN_HOST)" = yes; then \
+	    python $(top_srcdir)/test/test_macos_launch.py; \
+	  fi; \
 	else \
 	  echo '*** Python is required for check-control.'; exit 1; \
 	fi

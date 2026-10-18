@@ -10,11 +10,15 @@ DMTCP supports transparent application checkpoint/restart on:
  * most Linux distros
  * x86_64, i386, arm64, risc-v
 
-On macOS, DMTCP provides the control-plane tools `dmtcp_coordinator` and
-`dmtcp_command`. They can coordinate DMTCP workers running on Linux over TCP.
-Checkpointing or restarting a macOS application is not supported. The worker
-runtime depends on Linux procfs, ELF loading and symbol interposition, Linux
-thread and memory system calls, and architecture-specific MTCP restart code.
+On macOS, DMTCP provides `dmtcp_coordinator`, `dmtcp_command`, and an
+experimental single-process, registration-only `dmtcp_launch`. The launcher can
+inject a small runtime into user-owned, non-hardened Mach-O executables so they
+appear in
+coordinator status and respond to kill or quit commands. It does not checkpoint
+or restart macOS applications; checkpoint commands are rejected while a
+registration-only process is connected. The checkpoint runtime still depends
+on Linux procfs, ELF loading and symbol interposition, Linux thread and memory
+system calls, and architecture-specific MTCP restart code.
 
 If you are looking for transparent checkpointing of MPI, please see:
  * MANA package: https://github.com/mpickpt/mana

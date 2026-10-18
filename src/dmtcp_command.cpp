@@ -324,6 +324,11 @@ main(int argc, char **argv)
                 " currently happening or there are no connected processes.\n");
       }
       break;
+    case DMT_COORD_CKPT_UNSUPPORTED:
+      fprintf(stderr,
+              "Checkpointing is unavailable because this computation "
+              "contains a registration-only process.\n");
+      break;
     default:
       fprintf(stderr, "Unknown error\n");
       break;

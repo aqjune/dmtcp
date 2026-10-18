@@ -77,7 +77,9 @@ class CoordClient
 
     int isNSWorker() { return _isNSWorker; }
 
-    void readProcessInfo(DmtcpMessage &msg);
+    bool checkpointCapable() const { return _checkpointCapable; }
+
+    bool readProcessInfo(DmtcpMessage &msg);
 
   private:
     UniquePid _identity;
@@ -93,6 +95,7 @@ class CoordClient
     pid_t _realPid;
     pid_t _virtualPid;
     int _isNSWorker;
+    bool _checkpointCapable;
 };
 
 typedef struct {
@@ -188,6 +191,7 @@ class DmtcpCoordinator
     void releaseBarrier(const string &barrier);
 
     bool startCheckpoint();
+    bool allClientsCheckpointCapable() const;
     void recordCkptFilename(CoordClient *client, const char *barrierList);
 
     void handleUserCommand(CoordinatorCmd command,

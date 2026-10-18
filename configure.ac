@@ -28,7 +28,8 @@ esac
 
 AC_ARG_ENABLE([control-plane-only],
             [AS_HELP_STRING([--enable-control-plane-only],
-                            [Build only dmtcp_coordinator and dmtcp_command.
+                            [Build coordinator, command, and platform-safe
+                             control tools without the checkpoint runtime.
                              This mode is selected automatically on macOS,
                              where application checkpoint/restart is not
                              supported.])],

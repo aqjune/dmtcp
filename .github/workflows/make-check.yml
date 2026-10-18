@@ -33,13 +33,14 @@ jobs:
     - uses: actions/checkout@v3
     - name: configure control-plane build
       run: ./configure
-    - name: build coordinator and command
+    - name: build coordinator, command, and launcher
       run: make -j2
-    - name: verify unsupported runtime tools are not built
+    - name: verify supported macOS artifacts
       run: |
         test -x bin/dmtcp_coordinator
         test -x bin/dmtcp_command
-        test ! -e bin/dmtcp_launch
+        test -x bin/dmtcp_launch
+        test -f lib/dmtcp/libdmtcp-register.dylib
         test ! -e bin/dmtcp_restart
     - name: run control-plane tests
       run: make check-control

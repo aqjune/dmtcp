@@ -1500,7 +1500,8 @@ Optional Features:
   --disable-dependency-tracking
                           speeds up one-time build
   --enable-control-plane-only
-                          Build only dmtcp_coordinator and dmtcp_command. This
+                          Build coordinator, command, and platform-safe
+                          control tools without the checkpoint runtime. This
                           mode is selected automatically on macOS, where
                           application checkpoint/restart is not supported.
   --disable-openmp        do not use OpenMP
