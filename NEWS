@@ -10,7 +10,9 @@ Development version
   non-hardened Mach-O executables can join the coordinator and respond to
   lifecycle commands. Process creation and image replacement are rejected.
   Checkpoint requests are rejected explicitly; checkpoint/restart of macOS
-  applications is not supported.
+  applications is not supported. Experimental `--snapshot-file` capture writes
+  arm64 thread state, Mach VM metadata, and resident writable pages on
+  `SIGUSR2`; these images are not yet restorable.
 * Coordinators now listen on 127.0.0.1 by default. Multi-host deployments must
   select an intended local interface with `--coord-bind` or
   `DMTCP_COORD_BIND`; `0.0.0.0` remains available as an explicit choice.

@@ -11,18 +11,23 @@
 #include <cstdlib>
 #include <cstring>
 #include <mach-o/dyld.h>
+#include <limits.h>
 #include <pthread.h>
+#include <signal.h>
 #include <string>
 #include <unistd.h>
 #include <vector>
 
 #include "constants.h"
 #include "dmtcp.h"
+#include "mach_snapshot.h"
 #include "util.h"
 
 namespace {
 
 std::atomic<int> coordinatorFd{-1};
+char snapshotPath[PATH_MAX] = {};
+sigset_t snapshotSignalSet;
 
 std::string
 programName()
@@ -69,11 +74,40 @@ terminateForkChild()
 void *
 monitorCoordinator(void *argument)
 {
+  dmtcp::MachSnapshot::markCurrentThread(
+    dmtcp::MachSnapshot::kCoordinatorThread);
   const int fd = static_cast<int>(reinterpret_cast<intptr_t>(argument));
   dmtcp::Registration::monitorCoordinator(fd);
   int expected = fd;
   coordinatorFd.compare_exchange_strong(expected, -1);
   return nullptr;
+}
+
+void *
+snapshotOnSignal(void *)
+{
+  dmtcp::MachSnapshot::markCurrentThread(
+    dmtcp::MachSnapshot::kSnapshotThread);
+  while (true) {
+    int receivedSignal = 0;
+    if (sigwait(&snapshotSignalSet, &receivedSignal) != 0) {
+      continue;
+    }
+    if (receivedSignal != SIGUSR2) {
+      continue;
+    }
+
+    char error[256] = {};
+    if (dmtcp::MachSnapshot::write(snapshotPath, error, sizeof(error))) {
+      dprintf(STDERR_FILENO,
+              "dmtcp_launch: wrote experimental Mach snapshot to %s\n",
+              snapshotPath);
+    } else {
+      dprintf(STDERR_FILENO,
+              "dmtcp_launch: experimental Mach snapshot failed: %s\n",
+              error);
+    }
+  }
 }
 
 } // namespace
@@ -118,6 +152,37 @@ dmtcpRegisterProcess()
             "dmtcp_launch: cannot install fork handler: %s\n",
             strerror(atForkResult));
     _exit(DMTCP_FAIL_RC);
+  }
+
+  const char *configuredSnapshotPath =
+    getenv(dmtcp::MachSnapshot::kSnapshotPathEnv);
+  if (configuredSnapshotPath != nullptr && configuredSnapshotPath[0] != '\0') {
+    if (strlen(configuredSnapshotPath) >= sizeof(snapshotPath)) {
+      dprintf(STDERR_FILENO, "dmtcp_launch: snapshot path is too long\n");
+      _exit(DMTCP_FAIL_RC);
+    }
+    snprintf(snapshotPath, sizeof(snapshotPath), "%s", configuredSnapshotPath);
+    sigemptyset(&snapshotSignalSet);
+    sigaddset(&snapshotSignalSet, SIGUSR2);
+    const int maskResult = pthread_sigmask(SIG_BLOCK, &snapshotSignalSet,
+                                           nullptr);
+    if (maskResult != 0) {
+      dprintf(STDERR_FILENO,
+              "dmtcp_launch: cannot reserve snapshot signal: %s\n",
+              strerror(maskResult));
+      _exit(DMTCP_FAIL_RC);
+    }
+
+    pthread_t snapshotThread;
+    const int snapshotThreadResult = pthread_create(
+      &snapshotThread, nullptr, snapshotOnSignal, nullptr);
+    if (snapshotThreadResult != 0) {
+      dprintf(STDERR_FILENO,
+              "dmtcp_launch: cannot create snapshot monitor: %s\n",
+              strerror(snapshotThreadResult));
+      _exit(DMTCP_FAIL_RC);
+    }
+    pthread_detach(snapshotThread);
   }
 
   pthread_t monitorThread;

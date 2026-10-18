@@ -14,6 +14,7 @@
 #include <mach-o/dyld.h>
 #include <mach-o/fat.h>
 #include <mach-o/loader.h>
+#include <signal.h>
 #include <string>
 #include <string_view>
 #include <sys/mman.h>
@@ -24,6 +25,7 @@
 #include "config.h"
 #include "constants.h"
 #include "coordinatorapi_registration.h"
+#include "mach_snapshot.h"
 
 namespace {
 
@@ -36,6 +38,7 @@ const char *usage =
   "  --join-coordinator       Require an existing coordinator (default)\n"
   "  -h, --coord-host HOST    Coordinator host (default: 127.0.0.1)\n"
   "  -p, --coord-port PORT    Coordinator port (default: 7779)\n"
+  "  --snapshot-file FILE     Write experimental Mach snapshot on SIGUSR2\n"
   "  -q, --quiet              Suppress launcher notices\n"
   "  --help                   Show this help\n"
   "  --version                Show the DMTCP version\n";
@@ -481,8 +484,10 @@ int
 main(int argc, char **argv)
 {
   std::string host = DEFAULT_HOST;
+  std::string snapshotPath;
   int port = DEFAULT_PORT;
   bool quiet = false;
+  bool snapshotRequested = false;
   int commandIndex = -1;
 
   for (int i = 1; i < argc; ++i) {
@@ -527,6 +532,16 @@ main(int argc, char **argv)
       port = parsePort(argument.c_str() + strlen("--coord-port="));
       continue;
     }
+    if (argument == "--snapshot-file") {
+      snapshotRequested = true;
+      snapshotPath = optionValue(argc, argv, &i, argument.c_str());
+      continue;
+    }
+    if (argument.rfind("--snapshot-file=", 0) == 0) {
+      snapshotRequested = true;
+      snapshotPath = argument.substr(strlen("--snapshot-file="));
+      continue;
+    }
     if (argument == "--new-coordinator" ||
         argument == "--any-coordinator") {
       fail(argument + " is unavailable in macOS registration-only mode");
@@ -540,6 +555,9 @@ main(int argc, char **argv)
   }
   if (host.empty()) {
     fail("coordinator host must not be empty");
+  }
+  if (snapshotRequested && snapshotPath.empty()) {
+    fail("snapshot path must not be empty");
   }
 
   const std::filesystem::path target = resolveCommandPath(argv[commandIndex]);
@@ -586,6 +604,27 @@ main(int argc, char **argv)
   setEnvironment(ENV_VAR_NAME_HOST, host);
   setEnvironment(ENV_VAR_NAME_PORT, std::to_string(port));
   setEnvironment(dmtcp::Registration::kEnabledEnv, "1");
+  if (snapshotRequested) {
+    sigset_t snapshotSignalSet;
+    sigemptyset(&snapshotSignalSet);
+    sigaddset(&snapshotSignalSet, SIGUSR2);
+    if (sigprocmask(SIG_BLOCK, &snapshotSignalSet, nullptr) == -1) {
+      fail("cannot reserve SIGUSR2 for snapshot capture: " +
+           std::string(strerror(errno)));
+    }
+
+    std::error_code pathError;
+    const std::filesystem::path absoluteSnapshot =
+      std::filesystem::absolute(snapshotPath, pathError);
+    if (pathError) {
+      fail("cannot resolve snapshot path '" + snapshotPath + "'");
+    }
+    snapshotPath = absoluteSnapshot.lexically_normal().string();
+    setEnvironment(dmtcp::MachSnapshot::kSnapshotPathEnv, snapshotPath);
+  } else if (unsetenv(dmtcp::MachSnapshot::kSnapshotPathEnv) == -1) {
+    fail("cannot clear inherited snapshot configuration: " +
+         std::string(strerror(errno)));
+  }
   setEnvironment("DYLD_INSERT_LIBRARIES", insertedLibraries);
 
   if (!quiet) {
@@ -593,6 +632,11 @@ main(int argc, char **argv)
             "dmtcp_launch: registering '%s' with %s:%d; "
             "checkpoint/restart is unavailable on macOS\n",
             argv[commandIndex], host.c_str(), port);
+    if (!snapshotPath.empty()) {
+      fprintf(stderr,
+              "dmtcp_launch: send SIGUSR2 to write experimental snapshot %s\n",
+              snapshotPath.c_str());
+    }
   }
 
   execv(target.c_str(), &argv[commandIndex]);

@@ -381,7 +381,8 @@ __d_bindir__dmtcp_sshd_OBJECTS = $(am___d_bindir__dmtcp_sshd_OBJECTS)
 __d_bindir__dmtcp_sshd_DEPENDENCIES = libssh.a
 am___d_libdir__libdmtcp_register_dylib_OBJECTS = __d_libdir__libdmtcp_register_dylib-coordinatorapi_registration.$(OBJEXT) \
 	__d_libdir__libdmtcp_register_dylib-dmtcp_process_interpose.$(OBJEXT) \
-	__d_libdir__libdmtcp_register_dylib-dmtcp_register_dylib.$(OBJEXT)
+	__d_libdir__libdmtcp_register_dylib-dmtcp_register_dylib.$(OBJEXT) \
+	__d_libdir__libdmtcp_register_dylib-mach_snapshot.$(OBJEXT)
 __d_libdir__libdmtcp_register_dylib_OBJECTS =  \
 	$(am___d_libdir__libdmtcp_register_dylib_OBJECTS)
 __d_libdir__libdmtcp_register_dylib_LINK = $(CXXLD) $(AM_CXXFLAGS) \
@@ -446,6 +447,7 @@ am__depfiles_remade = $(jalibdir)/$(DEPDIR)/jalib.Po \
 	./$(DEPDIR)/__d_libdir__libdmtcp_register_dylib-coordinatorapi_registration.Po \
 	./$(DEPDIR)/__d_libdir__libdmtcp_register_dylib-dmtcp_process_interpose.Po \
 	./$(DEPDIR)/__d_libdir__libdmtcp_register_dylib-dmtcp_register_dylib.Po \
+	./$(DEPDIR)/__d_libdir__libdmtcp_register_dylib-mach_snapshot.Po \
 	./$(DEPDIR)/__d_libdir__libdmtcp_so-alarm.Po \
 	./$(DEPDIR)/__d_libdir__libdmtcp_so-ckptserializer.Po \
 	./$(DEPDIR)/__d_libdir__libdmtcp_so-dmtcp_dlsym_wrappers.Po \
@@ -921,16 +923,16 @@ dmtcpversioninclude_HEADERS = $(srcdir)/../include/dmtcp/version.h
 nobase_noinst_HEADERS = ckptserializer.h constants.h coordinatorapi.h \
 	coordinatorapi_registration.h coordinatorplugin.h \
 	dmtcp_coordinator.h dmtcprestartinternal.h dmtcpmessagetypes.h \
-	dmtcpworker.h guardpages.h json.h logger.h lookup_service.h \
-	ldt.h plugininfo.h pluginmanager.h processinfo.h \
-	restartscript.h tls.h siginfo.h syscallwrappers.h threadinfo.h \
-	threadlist.h threadsync.h dmtcp_assert.h uniquepid.h \
-	workerstate.h plugin/alloc/alloc.h $(jalibdir)/jalib.h \
-	$(jalibdir)/jalloc.h $(jalibdir)/jconvert.h \
-	$(jalibdir)/jfilesystem.h $(jalibdir)/jserialize.h \
-	$(jalibdir)/jsocket.h $(dmtcpincludedir)/dmtcp.h \
-	$(dmtcpincludedir)/dmtcpalloc.h $(dmtcpincludedir)/futex.h \
-	$(dmtcpincludedir)/procmapsarea.h \
+	dmtcpworker.h guardpages.h json.h logger.h mach_snapshot.h \
+	lookup_service.h ldt.h plugininfo.h pluginmanager.h \
+	processinfo.h restartscript.h tls.h siginfo.h \
+	syscallwrappers.h threadinfo.h threadlist.h threadsync.h \
+	dmtcp_assert.h uniquepid.h workerstate.h plugin/alloc/alloc.h \
+	$(jalibdir)/jalib.h $(jalibdir)/jalloc.h \
+	$(jalibdir)/jconvert.h $(jalibdir)/jfilesystem.h \
+	$(jalibdir)/jserialize.h $(jalibdir)/jsocket.h \
+	$(dmtcpincludedir)/dmtcp.h $(dmtcpincludedir)/dmtcpalloc.h \
+	$(dmtcpincludedir)/futex.h $(dmtcpincludedir)/procmapsarea.h \
 	$(dmtcpincludedir)/procselfmaps.h \
 	$(dmtcpincludedir)/protectedfds.h \
 	$(dmtcpincludedir)/shareddata.h $(dmtcpincludedir)/tokenize.h \
@@ -1167,7 +1169,8 @@ __d_libdir__libdmtcp_so_DEPENDENCIES = libdmtcp_ssh_internal.a \
 __d_libdir__libdmtcp_register_dylib_SOURCES = \
 	coordinatorapi_registration.cpp \
 	dmtcp_process_interpose.cpp \
-	dmtcp_register_dylib.cpp
+	dmtcp_register_dylib.cpp \
+	mach_snapshot.cpp
 
 __d_libdir__libdmtcp_register_dylib_CPPFLAGS = $(AM_CPPFLAGS)
 __d_libdir__libdmtcp_register_dylib_LDFLAGS = \
@@ -1696,6 +1699,7 @@ distclean-compile:
 @AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/__d_libdir__libdmtcp_register_dylib-coordinatorapi_registration.Po@am__quote@ # am--include-marker
 @AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/__d_libdir__libdmtcp_register_dylib-dmtcp_process_interpose.Po@am__quote@ # am--include-marker
 @AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/__d_libdir__libdmtcp_register_dylib-dmtcp_register_dylib.Po@am__quote@ # am--include-marker
+@AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/__d_libdir__libdmtcp_register_dylib-mach_snapshot.Po@am__quote@ # am--include-marker
 @AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/__d_libdir__libdmtcp_so-alarm.Po@am__quote@ # am--include-marker
 @AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/__d_libdir__libdmtcp_so-ckptserializer.Po@am__quote@ # am--include-marker
 @AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/__d_libdir__libdmtcp_so-dmtcp_dlsym_wrappers.Po@am__quote@ # am--include-marker
@@ -2118,6 +2122,20 @@ __d_libdir__libdmtcp_register_dylib-dmtcp_register_dylib.obj: dmtcp_register_dyl
 @AMDEP_TRUE@@am__fastdepCXX_FALSE@	$(AM_V_CXX)source='dmtcp_register_dylib.cpp' object='__d_libdir__libdmtcp_register_dylib-dmtcp_register_dylib.obj' libtool=no @AMDEPBACKSLASH@
 @AMDEP_TRUE@@am__fastdepCXX_FALSE@	DEPDIR=$(DEPDIR) $(CXXDEPMODE) $(depcomp) @AMDEPBACKSLASH@
 @am__fastdepCXX_FALSE@	$(AM_V_CXX@am__nodep@)$(CXX) $(DEFS) $(DEFAULT_INCLUDES) $(INCLUDES) $(__d_libdir__libdmtcp_register_dylib_CPPFLAGS) $(CPPFLAGS) $(AM_CXXFLAGS) $(CXXFLAGS) -c -o __d_libdir__libdmtcp_register_dylib-dmtcp_register_dylib.obj `if test -f 'dmtcp_register_dylib.cpp'; then $(CYGPATH_W) 'dmtcp_register_dylib.cpp'; else $(CYGPATH_W) '$(srcdir)/dmtcp_register_dylib.cpp'; fi`
+
+__d_libdir__libdmtcp_register_dylib-mach_snapshot.o: mach_snapshot.cpp
+@am__fastdepCXX_TRUE@	$(AM_V_CXX)$(CXX) $(DEFS) $(DEFAULT_INCLUDES) $(INCLUDES) $(__d_libdir__libdmtcp_register_dylib_CPPFLAGS) $(CPPFLAGS) $(AM_CXXFLAGS) $(CXXFLAGS) -MT __d_libdir__libdmtcp_register_dylib-mach_snapshot.o -MD -MP -MF $(DEPDIR)/__d_libdir__libdmtcp_register_dylib-mach_snapshot.Tpo -c -o __d_libdir__libdmtcp_register_dylib-mach_snapshot.o `test -f 'mach_snapshot.cpp' || echo '$(srcdir)/'`mach_snapshot.cpp
+@am__fastdepCXX_TRUE@	$(AM_V_at)$(am__mv) $(DEPDIR)/__d_libdir__libdmtcp_register_dylib-mach_snapshot.Tpo $(DEPDIR)/__d_libdir__libdmtcp_register_dylib-mach_snapshot.Po
+@AMDEP_TRUE@@am__fastdepCXX_FALSE@	$(AM_V_CXX)source='mach_snapshot.cpp' object='__d_libdir__libdmtcp_register_dylib-mach_snapshot.o' libtool=no @AMDEPBACKSLASH@
+@AMDEP_TRUE@@am__fastdepCXX_FALSE@	DEPDIR=$(DEPDIR) $(CXXDEPMODE) $(depcomp) @AMDEPBACKSLASH@
+@am__fastdepCXX_FALSE@	$(AM_V_CXX@am__nodep@)$(CXX) $(DEFS) $(DEFAULT_INCLUDES) $(INCLUDES) $(__d_libdir__libdmtcp_register_dylib_CPPFLAGS) $(CPPFLAGS) $(AM_CXXFLAGS) $(CXXFLAGS) -c -o __d_libdir__libdmtcp_register_dylib-mach_snapshot.o `test -f 'mach_snapshot.cpp' || echo '$(srcdir)/'`mach_snapshot.cpp
+
+__d_libdir__libdmtcp_register_dylib-mach_snapshot.obj: mach_snapshot.cpp
+@am__fastdepCXX_TRUE@	$(AM_V_CXX)$(CXX) $(DEFS) $(DEFAULT_INCLUDES) $(INCLUDES) $(__d_libdir__libdmtcp_register_dylib_CPPFLAGS) $(CPPFLAGS) $(AM_CXXFLAGS) $(CXXFLAGS) -MT __d_libdir__libdmtcp_register_dylib-mach_snapshot.obj -MD -MP -MF $(DEPDIR)/__d_libdir__libdmtcp_register_dylib-mach_snapshot.Tpo -c -o __d_libdir__libdmtcp_register_dylib-mach_snapshot.obj `if test -f 'mach_snapshot.cpp'; then $(CYGPATH_W) 'mach_snapshot.cpp'; else $(CYGPATH_W) '$(srcdir)/mach_snapshot.cpp'; fi`
+@am__fastdepCXX_TRUE@	$(AM_V_at)$(am__mv) $(DEPDIR)/__d_libdir__libdmtcp_register_dylib-mach_snapshot.Tpo $(DEPDIR)/__d_libdir__libdmtcp_register_dylib-mach_snapshot.Po
+@AMDEP_TRUE@@am__fastdepCXX_FALSE@	$(AM_V_CXX)source='mach_snapshot.cpp' object='__d_libdir__libdmtcp_register_dylib-mach_snapshot.obj' libtool=no @AMDEPBACKSLASH@
+@AMDEP_TRUE@@am__fastdepCXX_FALSE@	DEPDIR=$(DEPDIR) $(CXXDEPMODE) $(depcomp) @AMDEPBACKSLASH@
+@am__fastdepCXX_FALSE@	$(AM_V_CXX@am__nodep@)$(CXX) $(DEFS) $(DEFAULT_INCLUDES) $(INCLUDES) $(__d_libdir__libdmtcp_register_dylib_CPPFLAGS) $(CPPFLAGS) $(AM_CXXFLAGS) $(CXXFLAGS) -c -o __d_libdir__libdmtcp_register_dylib-mach_snapshot.obj `if test -f 'mach_snapshot.cpp'; then $(CYGPATH_W) 'mach_snapshot.cpp'; else $(CYGPATH_W) '$(srcdir)/mach_snapshot.cpp'; fi`
 
 __d_libdir__libdmtcp_so-alarm.o: alarm.cpp
 @am__fastdepCXX_TRUE@	$(AM_V_CXX)$(CXX) $(DEFS) $(DEFAULT_INCLUDES) $(INCLUDES) $(__d_libdir__libdmtcp_so_CPPFLAGS) $(CPPFLAGS) $(AM_CXXFLAGS) $(CXXFLAGS) -MT __d_libdir__libdmtcp_so-alarm.o -MD -MP -MF $(DEPDIR)/__d_libdir__libdmtcp_so-alarm.Tpo -c -o __d_libdir__libdmtcp_so-alarm.o `test -f 'alarm.cpp' || echo '$(srcdir)/'`alarm.cpp
@@ -2779,6 +2797,7 @@ distclean: distclean-recursive
 	-rm -f ./$(DEPDIR)/__d_libdir__libdmtcp_register_dylib-coordinatorapi_registration.Po
 	-rm -f ./$(DEPDIR)/__d_libdir__libdmtcp_register_dylib-dmtcp_process_interpose.Po
 	-rm -f ./$(DEPDIR)/__d_libdir__libdmtcp_register_dylib-dmtcp_register_dylib.Po
+	-rm -f ./$(DEPDIR)/__d_libdir__libdmtcp_register_dylib-mach_snapshot.Po
 	-rm -f ./$(DEPDIR)/__d_libdir__libdmtcp_so-alarm.Po
 	-rm -f ./$(DEPDIR)/__d_libdir__libdmtcp_so-ckptserializer.Po
 	-rm -f ./$(DEPDIR)/__d_libdir__libdmtcp_so-dmtcp_dlsym_wrappers.Po
@@ -2941,6 +2960,7 @@ maintainer-clean: maintainer-clean-recursive
 	-rm -f ./$(DEPDIR)/__d_libdir__libdmtcp_register_dylib-coordinatorapi_registration.Po
 	-rm -f ./$(DEPDIR)/__d_libdir__libdmtcp_register_dylib-dmtcp_process_interpose.Po
 	-rm -f ./$(DEPDIR)/__d_libdir__libdmtcp_register_dylib-dmtcp_register_dylib.Po
+	-rm -f ./$(DEPDIR)/__d_libdir__libdmtcp_register_dylib-mach_snapshot.Po
 	-rm -f ./$(DEPDIR)/__d_libdir__libdmtcp_so-alarm.Po
 	-rm -f ./$(DEPDIR)/__d_libdir__libdmtcp_so-ckptserializer.Po
 	-rm -f ./$(DEPDIR)/__d_libdir__libdmtcp_so-dmtcp_dlsym_wrappers.Po

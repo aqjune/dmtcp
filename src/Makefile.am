@@ -130,6 +130,7 @@ nobase_noinst_HEADERS =						\
 			guardpages.h				\
 			json.h					\
 			logger.h				\
+			mach_snapshot.h			\
 			lookup_service.h			\
 			ldt.h					\
 			plugininfo.h				\
@@ -440,7 +441,8 @@ __d_libdir__libdmtcp_so_DEPENDENCIES = libdmtcp_ssh_internal.a \
 __d_libdir__libdmtcp_register_dylib_SOURCES = \
 	coordinatorapi_registration.cpp \
 	dmtcp_process_interpose.cpp \
-	dmtcp_register_dylib.cpp
+	dmtcp_register_dylib.cpp \
+	mach_snapshot.cpp
 __d_libdir__libdmtcp_register_dylib_CPPFLAGS = $(AM_CPPFLAGS)
 __d_libdir__libdmtcp_register_dylib_LDFLAGS = \
 	-dynamiclib -Wl,-install_name,@rpath/libdmtcp-register.dylib

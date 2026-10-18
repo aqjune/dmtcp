@@ -16,7 +16,10 @@ inject a small runtime into user-owned, non-hardened Mach-O executables so they
 appear in
 coordinator status and respond to kill or quit commands. It does not checkpoint
 or restart macOS applications; checkpoint commands are rejected while a
-registration-only process is connected. The checkpoint runtime still depends
+registration-only process is connected. An optional `--snapshot-file` mode can
+capture arm64 thread registers, Mach VM metadata, and resident writable pages
+when the process receives `SIGUSR2`. These experimental images are not yet
+restorable. The checkpoint runtime still depends
 on Linux procfs, ELF loading and symbol interposition, Linux thread and memory
 system calls, and architecture-specific MTCP restart code.
 

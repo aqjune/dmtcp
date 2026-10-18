@@ -42,6 +42,19 @@ variable for platform binaries and can reject it for hardened applications.
 Do not disable System Integrity Protection or hardened-runtime protections to
 use this feature.
 
+To capture an experimental arm64 memory and thread image without stopping the
+process, provide a private output path and send `SIGUSR2` to the launched PID:
+
+```bash
+./bin/dmtcp_launch --snapshot-file ./ocaml.dmtcp -- \
+  ~/.opam/default/bin/ocamlrun ~/.opam/default/bin/ocaml
+kill -USR2 <pid>
+```
+
+The image contains Mach VM region metadata, resident writable pages, and arm64
+thread register state. It is an input to the in-progress restorer and cannot be
+passed to `dmtcp_restart` yet.
+
 The coordinator listens on `127.0.0.1` by default. To accept workers from
 other hosts, bind an intended interface explicitly, for example:
 

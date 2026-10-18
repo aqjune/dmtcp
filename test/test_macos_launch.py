@@ -4,7 +4,9 @@ import json
 import os
 import pathlib
 import shutil
+import signal
 import socket
+import struct
 import subprocess
 import tempfile
 import time
@@ -41,8 +43,22 @@ class MacOSLaunchTest(unittest.TestCase):
         source.write_text(
             "#include <stdio.h>\n"
             "#include <stdlib.h>\n"
+            "#include <sys/mman.h>\n"
             "#include <unistd.h>\n"
+            "volatile unsigned long long snapshot_marker;\n"
+            "volatile unsigned long long mapped_marker;\n"
             "int main(int argc, char **argv) {\n"
+            "  snapshot_marker = 0x0ddc0ffeebadf00dULL;\n"
+            "  char path[] = \"/tmp/dmtcp-mapped.XXXXXX\";\n"
+            "  int fd = mkstemp(path);\n"
+            "  unsigned long long value = 0x1234abcddcba4321ULL;\n"
+            "  if (fd == -1 || write(fd, &value, sizeof(value)) != "
+            "sizeof(value)) return 2;\n"
+            "  void *mapping = mmap(0, 16384, PROT_READ | PROT_WRITE, "
+            "MAP_PRIVATE, fd, 0);\n"
+            "  unlink(path); close(fd);\n"
+            "  if (mapping == MAP_FAILED) return 3;\n"
+            "  mapped_marker = *(volatile unsigned long long *)mapping;\n"
             "  puts(\"fixture-main\");\n"
             "  fflush(stdout);\n"
             "  sleep(argc > 1 ? (unsigned)atoi(argv[1]) : 30);\n"
@@ -99,6 +115,27 @@ class MacOSLaunchTest(unittest.TestCase):
         )
         subprocess.run(
             ["cc", str(exec_source), "-o", str(cls.exec_fixture)],
+            check=True,
+            cwd=ROOT,
+            timeout=COMMAND_TIMEOUT,
+        )
+
+        environment_source = cls.temp_path / "environment_fixture.c"
+        cls.environment_fixture = cls.temp_path / "environment_fixture"
+        environment_source.write_text(
+            "#include <stdio.h>\n"
+            "#include <stdlib.h>\n"
+            "#include <unistd.h>\n"
+            "int main(void) {\n"
+            "  puts(getenv(\"DMTCP_MACOS_SNAPSHOT_FILE\") ? "
+            "\"snapshot-env-set\" : \"snapshot-env-unset\");\n"
+            "  fflush(stdout); sleep(30); return 0;\n"
+            "}\n",
+            encoding="utf-8",
+        )
+        subprocess.run(
+            ["cc", str(environment_source), "-o",
+             str(cls.environment_fixture)],
             check=True,
             cwd=ROOT,
             timeout=COMMAND_TIMEOUT,
@@ -227,20 +264,25 @@ class MacOSLaunchTest(unittest.TestCase):
             return None
         return json.loads(result.stdout)
 
-    def launch_fixture(self, hold_seconds=30):
+    def launch_fixture(self, hold_seconds=30, snapshot_path=None):
+        command = [
+            str(DMTCP_LAUNCH),
+            "--quiet",
+            "--join-coordinator",
+            "--coord-host",
+            "127.0.0.1",
+            "--coord-port",
+            str(self.port),
+        ]
+        if snapshot_path is not None:
+            command.extend(["--snapshot-file", str(snapshot_path)])
+        command.extend([
+            "--",
+            str(self.fixture),
+            str(hold_seconds),
+        ])
         self.target = subprocess.Popen(
-            [
-                str(DMTCP_LAUNCH),
-                "--quiet",
-                "--join-coordinator",
-                "--coord-host",
-                "127.0.0.1",
-                "--coord-port",
-                str(self.port),
-                "--",
-                str(self.fixture),
-                str(hold_seconds),
-            ],
+            command,
             cwd=ROOT,
             text=True,
             stdout=subprocess.PIPE,
@@ -253,6 +295,23 @@ class MacOSLaunchTest(unittest.TestCase):
                      and payload["num_peers"] == count else None),
             f"coordinator peer count {count}",
         )
+
+    def wait_for_snapshot(self, path):
+        def complete_image():
+            try:
+                data = path.read_bytes()
+            except FileNotFoundError:
+                return None
+            if len(data) < 72 or data[:16].rstrip(b"\0") != b"DMTCP-MACH-SNAP":
+                return None
+            region_count, thread_count, _, thread_offset = struct.unpack_from(
+                "<4Q", data, 40
+            )
+            if region_count == 0 or thread_count == 0 or thread_offset >= len(data):
+                return None
+            return data
+
+        return wait_until(complete_image, "completed Mach snapshot", timeout=20)
 
     def test_launch_registers_and_rejects_all_checkpoint_commands(self):
         self.launch_fixture()
@@ -276,6 +335,128 @@ class MacOSLaunchTest(unittest.TestCase):
         self.target.wait(timeout=5)
         self.assertEqual(self.target.returncode, 0)
         self.wait_for_peer_count(0)
+
+    def test_inherited_snapshot_path_does_not_enable_capture(self):
+        inherited_path = self.temp_path / f"inherited-{time.time_ns()}.dmtcp"
+        environment = os.environ.copy()
+        environment["DMTCP_MACOS_SNAPSHOT_FILE"] = str(inherited_path)
+        self.target = subprocess.Popen(
+            [
+                str(DMTCP_LAUNCH),
+                "--quiet",
+                "--coord-host",
+                "127.0.0.1",
+                "--coord-port",
+                str(self.port),
+                "--",
+                str(self.environment_fixture),
+            ],
+            cwd=ROOT,
+            env=environment,
+            text=True,
+            stdout=subprocess.PIPE,
+            stderr=subprocess.PIPE,
+        )
+        self.wait_for_peer_count(1)
+        self.assertEqual(
+            self.target.stdout.readline().strip(),
+            "snapshot-env-unset",
+        )
+        self.assertFalse(inherited_path.exists())
+        result = self.run_command("--kill")
+        self.assertEqual(result.returncode, 0, result.stderr)
+        self.target.wait(timeout=5)
+        self.assertEqual(self.target.returncode, 0)
+
+    def test_signal_writes_compact_memory_and_thread_snapshot(self):
+        snapshot = self.temp_path / f"snapshot-{time.time_ns()}.dmtcp"
+        self.addCleanup(snapshot.unlink, missing_ok=True)
+        self.launch_fixture(snapshot_path=snapshot)
+        self.wait_for_peer_count(1)
+        self.assertEqual(self.target.stdout.readline().strip(), "fixture-main")
+
+        os.kill(self.target.pid, signal.SIGUSR2)
+        data = self.wait_for_snapshot(snapshot)
+        version, header_size, endian, pointer_size, page_size, flags = \
+            struct.unpack_from("<6I", data, 16)
+        regions, threads, captured, thread_offset = struct.unpack_from(
+            "<4Q", data, 40
+        )
+        self.assertEqual(version, 1)
+        self.assertEqual(header_size, 72)
+        self.assertEqual(endian, 0x12345678)
+        self.assertEqual(pointer_size, 8)
+        self.assertGreaterEqual(page_size, 4096)
+        self.assertNotEqual(flags & 1, 0)
+        self.assertGreater(regions, 0)
+        self.assertGreaterEqual(threads, 3)
+        self.assertGreater(captured, 0)
+        self.assertLess(thread_offset, len(data))
+
+        region_offset = header_size
+        stored_bytes = 0
+        region_record_format = "<8Q2q3i6I4x"
+        region_record_size = struct.calcsize(region_record_format)
+        unavailable_backing_data = bytearray()
+        for _ in range(regions):
+            record = struct.unpack_from(region_record_format,
+                                        data, region_offset)
+            region_size = record[1]
+            data_size = record[3]
+            page_count = record[4]
+            region_flags = record[17]
+            backing_path_length = record[18]
+            region_offset += region_record_size + backing_path_length
+            page_bytes = 0
+            for _ in range(page_count):
+                page_offset, page_size_bytes, _ = struct.unpack_from(
+                    "<QII", data, region_offset
+                )
+                region_offset += struct.calcsize("<QII")
+                self.assertLess(page_offset, region_size)
+                self.assertLessEqual(page_offset + page_size_bytes,
+                                     region_size)
+                page_contents = data[
+                    region_offset:region_offset + page_size_bytes
+                ]
+                if region_flags & (1 << 4):
+                    unavailable_backing_data.extend(page_contents)
+                region_offset += page_size_bytes
+                page_bytes += page_size_bytes
+            self.assertEqual(page_bytes, data_size)
+            stored_bytes += page_bytes
+        self.assertEqual(region_offset, thread_offset)
+        self.assertEqual(stored_bytes, captured)
+        thread_record_size = 832
+        self.assertEqual(
+            thread_offset + threads * thread_record_size,
+            len(data),
+        )
+        thread_flags = []
+        for index in range(threads):
+            record_offset = thread_offset + index * thread_record_size
+            thread_prefix = struct.unpack_from("<Q6I", data, record_offset)
+            self.assertEqual(thread_prefix[2], 68)
+            self.assertEqual(thread_prefix[4], 132)
+            thread_flags.append(thread_prefix[5])
+        self.assertEqual(sum(bool(value & 1) for value in thread_flags), 1)
+        self.assertEqual(sum(bool(value & 2) for value in thread_flags), 1)
+
+        self.assertIn(struct.pack("<Q", 0x0DDC0FFEEBADF00D), data)
+        self.assertIn(
+            struct.pack("<Q", 0x1234ABCDDCBA4321),
+            unavailable_backing_data,
+        )
+        self.assertNotEqual(flags & (1 << 2), 0)
+        self.assertLess(len(data), 256 * 1024 * 1024)
+        self.assertEqual(snapshot.stat().st_mode & 0o777, 0o600)
+        self.assertIsNone(self.target.poll())
+        self.assertEqual(self.status()["num_peers"], 1)
+
+        result = self.run_command("--kill")
+        self.assertEqual(result.returncode, 0, result.stderr)
+        self.target.wait(timeout=5)
+        self.assertEqual(self.target.returncode, 0)
 
     def test_registration_is_rejected_during_active_checkpoint(self):
         self.synthetic = subprocess.Popen(
@@ -421,6 +602,20 @@ class MacOSLaunchTest(unittest.TestCase):
         self.assertEqual(protected_result.returncode, 2)
         self.assertNotIn("unsafe", protected_result.stdout)
         self.assertIn("platform-protected", protected_result.stderr)
+
+        empty_snapshot_result = subprocess.run(
+            [str(DMTCP_LAUNCH), "--snapshot-file=", "--",
+             str(self.fixture), "0"],
+            cwd=ROOT,
+            text=True,
+            stdout=subprocess.PIPE,
+            stderr=subprocess.PIPE,
+            timeout=COMMAND_TIMEOUT,
+            check=False,
+        )
+        self.assertEqual(empty_snapshot_result.returncode, 2)
+        self.assertIn("snapshot path must not be empty",
+                      empty_snapshot_result.stderr)
 
     def test_dyld_restricted_target_is_rejected_before_main(self):
         result = subprocess.run(
