@@ -861,7 +861,7 @@ CLEANFILES = $(stale_folded_plugin_dsos)
 AM_CPPFLAGS = -I$(dmtcpincludedir) -I$(jalibdir) -I$(srcdir) \
 	     -I$(srcdir)/plugin -I$(srcdir)/plugin/timer \
 	     -I$(srcdir)/plugin/pid
-
+@CONTROL_PLANE_ONLY_TRUE@AM_CPPFLAGS += -DDMTCP_CONTROL_ONLY
 
 # targets:
 noinst_LIBRARIES = libjalib.a $(am__append_2) $(am__append_3)
@@ -921,7 +921,7 @@ libdmtcpcontrol_a_SOURCES = coordinatorapi_command.cpp \
                             util_init.cpp \
                             workerstate.cpp
 
-libdmtcpcontrol_a_CPPFLAGS = $(AM_CPPFLAGS) -DDMTCP_CONTROL_ONLY
+libdmtcpcontrol_a_CPPFLAGS = $(AM_CPPFLAGS)
 libjalib_a_SOURCES = $(jalibdir)/jalib.cpp			\
 		     $(jalibdir)/jalloc.cpp			\
 		     $(jalibdir)/jfilesystem.cpp 		\
@@ -1123,7 +1123,6 @@ __d_bindir__dmtcp_coordinator_SOURCES = dmtcp_coordinator.cpp 	\
 
 @CONTROL_PLANE_ONLY_FALSE@__d_bindir__dmtcp_coordinator_CPPFLAGS = $(AM_CPPFLAGS)
 @CONTROL_PLANE_ONLY_TRUE@__d_bindir__dmtcp_coordinator_CPPFLAGS = $(AM_CPPFLAGS) \
-@CONTROL_PLANE_ONLY_TRUE@                                        -DDMTCP_CONTROL_ONLY \
 @CONTROL_PLANE_ONLY_TRUE@                                        -DDMTCP_USE_POLL_EVENT_LOOP
 
 @CONTROL_PLANE_ONLY_FALSE@__d_bindir__dmtcp_coordinator_LDADD = libdmtcpinternal.a \
@@ -1155,7 +1154,7 @@ __d_bindir__dmtcp_restart_DEPENDENCIES = libdmtcprestart.a \
 	$(RESTART_PLUGIN)
 __d_bindir__dmtcp_command_SOURCES = dmtcp_command.cpp
 @CONTROL_PLANE_ONLY_FALSE@__d_bindir__dmtcp_command_CPPFLAGS = $(AM_CPPFLAGS)
-@CONTROL_PLANE_ONLY_TRUE@__d_bindir__dmtcp_command_CPPFLAGS = $(AM_CPPFLAGS) -DDMTCP_CONTROL_ONLY
+@CONTROL_PLANE_ONLY_TRUE@__d_bindir__dmtcp_command_CPPFLAGS = $(AM_CPPFLAGS)
 @CONTROL_PLANE_ONLY_FALSE@__d_bindir__dmtcp_command_LDADD = libdmtcpinternal.a \
 @CONTROL_PLANE_ONLY_FALSE@                                  libjalib.a \
 @CONTROL_PLANE_ONLY_FALSE@                                  libnohijack.a \

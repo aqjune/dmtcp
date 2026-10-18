@@ -46,8 +46,7 @@ Util::writeCoordPortToFile(int port, const char *portFile)
       return;
     }
     char port_buf[30];
-    memset(port_buf, '\0', sizeof(port_buf));
-    sprintf(port_buf, "%d", port);
+    snprintf(port_buf, sizeof(port_buf), "%d", port);
     writeAll(fd, port_buf, strlen(port_buf));
     fsync(fd);
     close(fd);

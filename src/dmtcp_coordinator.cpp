@@ -62,6 +62,7 @@
 #include <limits.h>  // for HOST_NAME_MAX
 #include <netdb.h>
 #include <poll.h>
+#include <signal.h>
 #include <stdio.h>
 #include <stdlib.h>
 #include <string_view>

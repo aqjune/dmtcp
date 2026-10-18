@@ -68,6 +68,10 @@ AM_CPPFLAGS= -I$(dmtcpincludedir) -I$(jalibdir) -I$(srcdir) \
 	     -I$(srcdir)/plugin -I$(srcdir)/plugin/timer \
 	     -I$(srcdir)/plugin/pid
 
+if CONTROL_PLANE_ONLY
+AM_CPPFLAGS += -DDMTCP_CONTROL_ONLY
+endif
+
 # targets:
 noinst_LIBRARIES = libjalib.a
 bin_PROGRAMS = $(d_bindir)/dmtcp_command \
@@ -188,7 +192,7 @@ libdmtcpcontrol_a_SOURCES = coordinatorapi_command.cpp \
                             util_control.cpp \
                             util_init.cpp \
                             workerstate.cpp
-libdmtcpcontrol_a_CPPFLAGS = $(AM_CPPFLAGS) -DDMTCP_CONTROL_ONLY
+libdmtcpcontrol_a_CPPFLAGS = $(AM_CPPFLAGS)
 
 libjalib_a_SOURCES = $(jalibdir)/jalib.cpp			\
 		     $(jalibdir)/jalloc.cpp			\
@@ -438,7 +442,6 @@ __d_bindir__dmtcp_coordinator_SOURCES = dmtcp_coordinator.cpp 	\
 
 if CONTROL_PLANE_ONLY
 __d_bindir__dmtcp_coordinator_CPPFLAGS = $(AM_CPPFLAGS) \
-                                        -DDMTCP_CONTROL_ONLY \
                                         -DDMTCP_USE_POLL_EVENT_LOOP
 __d_bindir__dmtcp_coordinator_LDADD = libdmtcpcontrol.a \
                                       libjalib.a \
@@ -476,7 +479,7 @@ __d_bindir__dmtcp_restart_DEPENDENCIES  = libdmtcprestart.a
 __d_bindir__dmtcp_command_SOURCES = dmtcp_command.cpp
 
 if CONTROL_PLANE_ONLY
-__d_bindir__dmtcp_command_CPPFLAGS = $(AM_CPPFLAGS) -DDMTCP_CONTROL_ONLY
+__d_bindir__dmtcp_command_CPPFLAGS = $(AM_CPPFLAGS)
 __d_bindir__dmtcp_command_LDADD = libdmtcpcontrol.a libjalib.a -lpthread
 else
 __d_bindir__dmtcp_command_CPPFLAGS = $(AM_CPPFLAGS)
